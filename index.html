@@ -22,7 +22,7 @@ const ctx = canvas.getContext("2d");
 
 let ws;
 let players = {};
-
+let myKarma = 0;
 function conectar() {
     ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
 
@@ -36,10 +36,29 @@ function conectar() {
     };
 
     ws.onmessage = (e) => {
-        try {
-            players = JSON.parse(e.data);
-        } catch {}
-    };
+    try {
+        players = JSON.parse(e.data);
+if (player.class === "paladin") ctx.fillStyle = "gold";
+else if (player.class === "oscuro") ctx.fillStyle = "purple";
+else if (player.class === "mago") ctx.fillStyle = "cyan";
+else ctx.fillStyle = "blue";
+        // obtener tu karma (primer jugador encontrado)
+        for (let id in players) {
+            let p = players[id];
+
+            // aproximación: jugador cercano = tú
+            let dx = p.x - player.x;
+            let dy = p.y - player.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 5) {
+                myKarma = p.karma || 0;
+                break;
+            }
+        }
+
+    } catch {}
+};
 }
 
 conectar();
@@ -86,7 +105,14 @@ function update() {
     if (keys["s"]) player.y += player.speed;
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
-
+// cambio automático por karma
+if (myKarma > 20) {
+    player.class = "paladin"; // bueno
+} else if (myKarma < -20) {
+    player.class = "oscuro"; // malo
+} else {
+    player.class = "guerrero"; // neutral
+}
     // ataque a enemigos
     if (attack) {
         enemies.forEach(e => {
