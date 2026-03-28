@@ -6,17 +6,23 @@ const server = http.createServer((req, res) => {
     res.end("Servidor activo");
 });
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on("upgrade", (request, socket, head) => {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+    });
+});
 
 wss.on("connection", (ws) => {
     console.log("Jugador conectado");
+
+    ws.send("Bienvenido al servidor");
 
     ws.on("message", (msg) => {
         console.log("Mensaje:", msg.toString());
         ws.send("Recibido: " + msg);
     });
-
-    ws.send("Bienvenido al servidor");
 });
 
 const PORT = process.env.PORT || 3000;
