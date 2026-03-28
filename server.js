@@ -9,6 +9,8 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ noServer: true });
 
 server.on("upgrade", (request, socket, head) => {
+    console.log("Upgrade request recibido");
+
     wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit("connection", ws, request);
     });
@@ -17,11 +19,11 @@ server.on("upgrade", (request, socket, head) => {
 wss.on("connection", (ws) => {
     console.log("Jugador conectado");
 
-    ws.send("Bienvenido al servidor");
+    ws.send("Conectado correctamente");
 
     ws.on("message", (msg) => {
         console.log("Mensaje:", msg.toString());
-        ws.send("Recibido: " + msg);
+        ws.send("OK");
     });
 });
 
