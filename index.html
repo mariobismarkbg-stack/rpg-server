@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>RPG Online</title>
+<style>
+body { background:black; color:white; text-align:center; }
+canvas { background:#111; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<h1>🌍 RPG Online</h1>
+<p id="status">🟢 Conectado</p>
+
+<canvas id="game" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// 🔌 conexión
+let ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
+let players = {};
+
+// jugador
+let player = { x: 1000, y: 1000, speed: 4 };
+
+// mapa
+const mapWidth = 2000;
+const mapHeight = 2000;
+
+// cámara
+let camera = { x: 0, y: 0 };
+
+// controles
+let keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// recibir jugadores
+ws.onmessage = (e) => {
+    try {
+        players = JSON.parse(e.data);
+    } catch {}
+};
+
+// actualizar
+function update() {
+    if (keys["w"]) player.y -= player.speed;
+    if (keys["s"]) player.y += player.speed;
+    if (keys["a"]) player.x -= player.speed;
+    if (keys["d"]) player.x += player.speed;
+
+    // enviar posición
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(player));
+    }
+
+    // cámara sigue al jugador
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
+}
+
+// dibujar
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // fondo
+    ctx.fillStyle = "#2e8b57";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // grid mapa
+    for (let x = 0; x < mapWidth; x += 100) {
+        for (let y = 0; y < mapHeight; y += 100) {
+            ctx.strokeStyle = "#1f5e3b";
+            ctx.strokeRect(x - camera.x, y - camera.y, 100, 100);
+        }
+    }
+
+    // árboles
+    ctx.fillStyle = "darkgreen";
+    ctx.fillRect(800 - camera.x, 900 - camera.y, 40, 40);
+    ctx.fillRect(1200 - camera.x, 1100 - camera.y, 40, 40);
+
+    // 👥 otros jugadores
+    for (let id in players) {
+        let p = players[id];
+
+        ctx.fillStyle = "red";
+        ctx.fillRect(p.x - camera.x, p.y - camera.y, 20, 30);
+
+        ctx.fillStyle = "white";
+        ctx.fillText("Jugador", p.x - camera.x, p.y - camera.y - 10);
+    }
+
+    // 🧍 tu jugador
+    ctx.fillStyle = "blue";
+    ctx.fillRect(player.x - camera.x, player.y - camera.y, 20, 30);
+
+    ctx.fillStyle = "#ffcc99";
+    ctx.fillRect(player.x - camera.x + 5, player.y - camera.y - 10, 10, 10);
+}
+
+// loop
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
