@@ -73,6 +73,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === " ") attack = true;
     if (e.key === "1") player.class = "guerrero";
     if (e.key === "2") player.class = "mago";
+    if (e.key === "3") player.class = "oscuro";
 });
 
 document.addEventListener("keyup", (e) => {
@@ -148,7 +149,9 @@ function draw() {
     }
 
     // jugador
-    ctx.fillStyle = player.class === "mago" ? "cyan" : "blue";
+    if (player.class === "mago") ctx.fillStyle = "cyan";
+else if (player.class === "oscuro") ctx.fillStyle = "purple";
+else ctx.fillStyle = "blue";
     ctx.fillRect(player.x - camera.x, player.y - camera.y, 20, 30);
 
     // UI
