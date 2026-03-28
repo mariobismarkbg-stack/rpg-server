@@ -23,6 +23,7 @@ const ctx = canvas.getContext("2d");
 let ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
 let players = {};
 let attack = false;
+
 // jugador
 let player = { x: 1000, y: 1000, speed: 4 };
 
@@ -42,7 +43,10 @@ document.addEventListener("keydown", (e) => {
         attack = true;
     }
 });
-document.addEventListener("keyup", e => keys[e.key] = false);
+
+document.addEventListener("keyup", (e) => {
+    keys[e.key] = false;
+});
 
 // recibir jugadores
 ws.onmessage = (e) => {
@@ -58,18 +62,18 @@ function update() {
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
 
-    // enviar posición
+    // enviar datos
     if (ws.readyState === WebSocket.OPEN) {
-       ws.send(JSON.stringify({
-    x: player.x,
-    y: player.y,
-    attack: attack
-}));
-
-attack = false;
+        ws.send(JSON.stringify({
+            x: player.x,
+            y: player.y,
+            attack: attack
+        }));
     }
 
-    // cámara sigue al jugador
+    attack = false;
+
+    // cámara
     camera.x = player.x - canvas.width / 2;
     camera.y = player.y - canvas.height / 2;
 }
@@ -82,7 +86,7 @@ function draw() {
     ctx.fillStyle = "#2e8b57";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // grid mapa
+    // grid
     for (let x = 0; x < mapWidth; x += 100) {
         for (let y = 0; y < mapHeight; y += 100) {
             ctx.strokeStyle = "#1f5e3b";
@@ -98,12 +102,17 @@ function draw() {
     // 👥 otros jugadores
     for (let id in players) {
         let p = players[id];
-// barra de vida
-ctx.fillStyle = "red";
-ctx.fillRect(p.x - camera.x, p.y - camera.y - 20, 40, 5);
 
-ctx.fillStyle = "lime";
-ctx.fillRect(p.x - camera.x, p.y - camera.y - 20, p.hp * 0.4, 5);
+        let hp = p.hp || 100;
+
+        // barra de vida
+        ctx.fillStyle = "red";
+        ctx.fillRect(p.x - camera.x, p.y - camera.y - 20, 40, 5);
+
+        ctx.fillStyle = "lime";
+        ctx.fillRect(p.x - camera.x, p.y - camera.y - 20, hp * 0.4, 5);
+
+        // jugador enemigo
         ctx.fillStyle = "red";
         ctx.fillRect(p.x - camera.x, p.y - camera.y, 20, 30);
 
@@ -126,6 +135,11 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
+loop(); // 🔥 esto faltaba
+</script>
+
+</body>
+</html>
 loop();
 </script>
 
