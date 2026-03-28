@@ -22,7 +22,7 @@ const ctx = canvas.getContext("2d");
 // 🔌 conexión
 let ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
 let players = {};
-
+let attack = false;
 // jugador
 let player = { x: 1000, y: 1000, speed: 4 };
 
@@ -35,7 +35,13 @@ let camera = { x: 0, y: 0 };
 
 // controles
 let keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keydown", (e) => {
+    keys[e.key] = true;
+
+    if (e.key === " ") {
+        attack = true;
+    }
+});
 document.addEventListener("keyup", e => keys[e.key] = false);
 
 // recibir jugadores
@@ -54,7 +60,13 @@ function update() {
 
     // enviar posición
     if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(player));
+       ws.send(JSON.stringify({
+    x: player.x,
+    y: player.y,
+    attack: attack
+}));
+
+attack = false;
     }
 
     // cámara sigue al jugador
@@ -86,7 +98,12 @@ function draw() {
     // 👥 otros jugadores
     for (let id in players) {
         let p = players[id];
+// barra de vida
+ctx.fillStyle = "red";
+ctx.fillRect(p.x - camera.x, p.y - camera.y - 20, 40, 5);
 
+ctx.fillStyle = "lime";
+ctx.fillRect(p.x - camera.x, p.y - camera.y - 20, p.hp * 0.4, 5);
         ctx.fillStyle = "red";
         ctx.fillRect(p.x - camera.x, p.y - camera.y, 20, 30);
 
