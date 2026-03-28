@@ -11,7 +11,7 @@ canvas { background:#111; margin-top:20px; }
 <body>
 
 <h1>🌍 RPG Online PRO</h1>
-<p id="status">🟢 Conectado</p>
+<p id="status">Conectando...</p>
 <p id="info"></p>
 
 <canvas id="game" width="600" height="400"></canvas>
@@ -20,9 +20,29 @@ canvas { background:#111; margin-top:20px; }
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// conexión
-let ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
+let ws;
 let players = {};
+
+function conectar() {
+    ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
+
+    ws.onopen = () => {
+        document.getElementById("status").innerText = "🟢 Conectado";
+    };
+
+    ws.onclose = () => {
+        document.getElementById("status").innerText = "Reconectando...";
+        setTimeout(conectar, 2000);
+    };
+
+    ws.onmessage = (e) => {
+        try {
+            players = JSON.parse(e.data);
+        } catch {}
+    };
+}
+
+conectar();
 
 // jugador
 let player = {
@@ -30,7 +50,6 @@ let player = {
     y: 1000,
     speed: 4,
     hp: 100,
-    mana: 100,
     class: "guerrero",
     inventory: []
 };
@@ -52,8 +71,6 @@ document.addEventListener("keydown", (e) => {
     keys[e.key] = true;
 
     if (e.key === " ") attack = true;
-
-    // cambiar clase
     if (e.key === "1") player.class = "guerrero";
     if (e.key === "2") player.class = "mago";
 });
@@ -61,13 +78,6 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keyup", (e) => {
     keys[e.key] = false;
 });
-
-// recibir jugadores
-ws.onmessage = (e) => {
-    try {
-        players = JSON.parse(e.data);
-    } catch {}
-};
 
 // update
 function update() {
@@ -91,7 +101,6 @@ function update() {
                     e.hp = 50;
                     e.x = Math.random()*2000;
                     e.y = Math.random()*2000;
-
                     player.inventory.push("loot");
                 }
             }
@@ -99,7 +108,7 @@ function update() {
     }
 
     // enviar server
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             x: player.x,
             y: player.y,
@@ -117,7 +126,6 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // fondo
     ctx.fillStyle = "#2e8b57";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -133,6 +141,8 @@ function draw() {
     // otros jugadores
     for (let id in players) {
         let p = players[id];
+        if (!p) continue;
+
         ctx.fillStyle = "red";
         ctx.fillRect(p.x - camera.x, p.y - camera.y, 20, 30);
     }
@@ -145,7 +155,6 @@ function draw() {
     document.getElementById("info").innerText =
         "Clase: " + player.class +
         " | Vida: " + player.hp +
-        " | Mana: " + player.mana +
         " | Inventario: " + player.inventory.length;
 }
 
