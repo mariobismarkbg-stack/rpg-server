@@ -23,6 +23,11 @@ const ctx = canvas.getContext("2d");
 let ws;
 let players = {};
 let myKarma = 0;
+
+// zonas
+const safeZone = { x: 1000, y: 1000, r: 200 };
+const darkZone = { x: 1400, y: 1400, r: 200 };
+
 function conectar() {
     ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
 
@@ -36,29 +41,25 @@ function conectar() {
     };
 
     ws.onmessage = (e) => {
-    try {
-        players = JSON.parse(e.data);
-if (player.class === "paladin") ctx.fillStyle = "gold";
-else if (player.class === "oscuro") ctx.fillStyle = "purple";
-else if (player.class === "mago") ctx.fillStyle = "cyan";
-else ctx.fillStyle = "blue";
-        // obtener tu karma (primer jugador encontrado)
-        for (let id in players) {
-            let p = players[id];
+        try {
+            players = JSON.parse(e.data);
 
-            // aproximación: jugador cercano = tú
-            let dx = p.x - player.x;
-            let dy = p.y - player.y;
-            let dist = Math.sqrt(dx*dx + dy*dy);
+            // detectar tu karma
+            for (let id in players) {
+                let p = players[id];
 
-            if (dist < 5) {
-                myKarma = p.karma || 0;
-                break;
+                let dx = p.x - player.x;
+                let dy = p.y - player.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+
+                if (dist < 5) {
+                    myKarma = p.karma || 0;
+                    break;
+                }
             }
-        }
 
-    } catch {}
-};
+        } catch {}
+    };
 }
 
 conectar();
@@ -90,9 +91,6 @@ document.addEventListener("keydown", (e) => {
     keys[e.key] = true;
 
     if (e.key === " ") attack = true;
-    if (e.key === "1") player.class = "guerrero";
-    if (e.key === "2") player.class = "mago";
-    if (e.key === "3") player.class = "oscuro";
 });
 
 document.addEventListener("keyup", (e) => {
@@ -105,14 +103,30 @@ function update() {
     if (keys["s"]) player.y += player.speed;
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
-// cambio automático por karma
-if (myKarma > 20) {
-    player.class = "paladin"; // bueno
-} else if (myKarma < -20) {
-    player.class = "oscuro"; // malo
-} else {
-    player.class = "guerrero"; // neutral
-}
+
+    // distancia a zonas
+    let dxSafe = player.x - safeZone.x;
+    let dySafe = player.y - safeZone.y;
+    let inSafe = Math.sqrt(dxSafe*dxSafe + dySafe*dySafe) < safeZone.r;
+
+    let dxDark = player.x - darkZone.x;
+    let dyDark = player.y - darkZone.y;
+    let inDark = Math.sqrt(dxDark*dxDark + dyDark*dyDark) < darkZone.r;
+
+    // bloquear ataque en ciudad
+    if (inSafe) attack = false;
+
+    // bloquear acceso zona oscura si no eres malo
+    if (inDark && myKarma > -20) {
+        player.x -= dxDark * 0.05;
+        player.y -= dyDark * 0.05;
+    }
+
+    // cambio automático por karma
+    if (myKarma > 20) player.class = "paladin";
+    else if (myKarma < -20) player.class = "oscuro";
+    else player.class = "guerrero";
+
     // ataque a enemigos
     if (attack) {
         enemies.forEach(e => {
@@ -153,8 +167,20 @@ if (myKarma > 20) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // fondo
     ctx.fillStyle = "#2e8b57";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // zonas
+    ctx.fillStyle = "rgba(0,255,0,0.2)";
+    ctx.beginPath();
+    ctx.arc(safeZone.x - camera.x, safeZone.y - camera.y, safeZone.r, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(100,0,100,0.3)";
+    ctx.beginPath();
+    ctx.arc(darkZone.x - camera.x, darkZone.y - camera.y, darkZone.r, 0, Math.PI*2);
+    ctx.fill();
 
     // enemigos
     enemies.forEach(e => {
@@ -175,15 +201,17 @@ function draw() {
     }
 
     // jugador
-    if (player.class === "mago") ctx.fillStyle = "cyan";
-else if (player.class === "oscuro") ctx.fillStyle = "purple";
-else ctx.fillStyle = "blue";
+    if (player.class === "paladin") ctx.fillStyle = "gold";
+    else if (player.class === "oscuro") ctx.fillStyle = "purple";
+    else if (player.class === "mago") ctx.fillStyle = "cyan";
+    else ctx.fillStyle = "blue";
+
     ctx.fillRect(player.x - camera.x, player.y - camera.y, 20, 30);
 
     // UI
     document.getElementById("info").innerText =
         "Clase: " + player.class +
-        " | Vida: " + player.hp +
+        " | Karma: " + myKarma +
         " | Inventario: " + player.inventory.length;
 }
 
