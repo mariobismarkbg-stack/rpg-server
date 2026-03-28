@@ -33,7 +33,7 @@ server.on("upgrade", (request, socket, head) => {
 wss.on("connection", (ws) => {
     const id = Math.random().toString(36).substr(2, 9);
 
-   players[id] = { x: 1000, y: 1000, hp: 100, karma: 0 };
+players[id] = { x: 1000, y: 1000, hp: 100, karma: 0 };
 
     ws.on("message", (msg) => {
     try {
