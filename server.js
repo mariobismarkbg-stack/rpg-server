@@ -33,76 +33,16 @@ server.on("upgrade", (request, socket, head) => {
 wss.on("connection", (ws) => {
     const id = Math.random().toString(36).substr(2, 9);
 
-players[id] = { x: 1000, y: 1000, hp: 100, karma: 0 };
+    players[id] = { x: 1000, y: 1000, hp: 100, karma: 0 };
 
     ws.on("message", (msg) => {
-    try {
-        let data = JSON.parse(msg);
-
-        players[id].x = data.x;
-        players[id].y = data.y;
-
-        // ataque normal
-        if (data.attack) {
-            for (let otherId in players) {
-                if (otherId !== id) {
-                    let p = players[otherId];
-
-                    let dx = p.x - players[id].x;
-                    let dy = p.y - players[id].y;
-                    let dist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (dist < 50) {
-                        p.hp -= 10;
-
-                        if (p.hp <= 0) {
-                            // sistema de karma
-                            if (p.karma >= 0) players[id].karma -= 10;
-                            else players[id].karma += 10;
-
-                            p.hp = 100;
-                            p.x = 1000;
-                            p.y = 1000;
-                        }
-                    }
-                }
-            }
-        }
-
-        // ataque AOE
-        if (data.aoe) {
-            for (let otherId in players) {
-                if (otherId !== id) {
-                    let p = players[otherId];
-
-                    let dx = p.x - players[id].x;
-                    let dy = p.y - players[id].y;
-                    let dist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (dist < 120) {
-                        p.hp -= 5;
-
-                        if (p.hp <= 0) {
-                            if (p.karma >= 0) players[id].karma -= 5;
-                            else players[id].karma += 5;
-
-                            p.hp = 100;
-                            p.x = 1000;
-                            p.y = 1000;
-                        }
-                    }
-                }
-            }
-        }
-
-    } catch (err) {}
-});
         try {
             let data = JSON.parse(msg);
 
             players[id].x = data.x;
             players[id].y = data.y;
 
+            // ⚔️ ataque normal
             if (data.attack) {
                 for (let otherId in players) {
                     if (otherId !== id) {
@@ -116,6 +56,36 @@ players[id] = { x: 1000, y: 1000, hp: 100, karma: 0 };
                             p.hp -= 10;
 
                             if (p.hp <= 0) {
+                                // karma
+                                if (p.karma >= 0) players[id].karma -= 10;
+                                else players[id].karma += 10;
+
+                                p.hp = 100;
+                                p.x = 1000;
+                                p.y = 1000;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 💥 ataque AOE
+            if (data.aoe) {
+                for (let otherId in players) {
+                    if (otherId !== id) {
+                        let p = players[otherId];
+
+                        let dx = p.x - players[id].x;
+                        let dy = p.y - players[id].y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist < 120) {
+                            p.hp -= 5;
+
+                            if (p.hp <= 0) {
+                                if (p.karma >= 0) players[id].karma -= 5;
+                                else players[id].karma += 5;
+
                                 p.hp = 100;
                                 p.x = 1000;
                                 p.y = 1000;
@@ -135,7 +105,7 @@ players[id] = { x: 1000, y: 1000, hp: 100, karma: 0 };
     });
 });
 
-// enviar datos a todos
+// enviar datos
 setInterval(() => {
     const data = JSON.stringify(players);
 
