@@ -6,7 +6,26 @@
 <style>
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:20px; }
-</style>
+</style>#inventory {
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(5, 50px);
+    gap: 5px;
+}
+
+.slot {
+    width: 50px;
+    height: 50px;
+    background: #222;
+    border: 2px solid #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
 </head>
 <body>
 
@@ -15,7 +34,7 @@ canvas { background:#111; margin-top:20px; }
 <p id="info"></p>
 
 <canvas id="game" width="600" height="400"></canvas>
-
+<div id="inventory"></div>
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -162,7 +181,30 @@ function update() {
     camera.x = player.x - canvas.width / 2;
     camera.y = player.y - canvas.height / 2;
 }
+function drawInventory() {
+    const inv = document.getElementById("inventory");
+    inv.innerHTML = "";
 
+    let counts = {};
+
+    // contar items
+    player.inventory.forEach(item => {
+        counts[item] = (counts[item] || 0) + 1;
+    });
+
+    let items = Object.keys(counts);
+
+    for (let i = 0; i < 10; i++) {
+        let slot = document.createElement("div");
+        slot.className = "slot";
+
+        if (items[i]) {
+            slot.innerText = items[i] + " (" + counts[items[i]] + ")";
+        }
+
+        inv.appendChild(slot);
+    }
+}
 // draw
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -219,6 +261,7 @@ function draw() {
 function loop() {
     update();
     draw();
+    drawInventory(); // 🔥 nuevo
     requestAnimationFrame(loop);
 }
 
