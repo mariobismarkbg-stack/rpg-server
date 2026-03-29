@@ -82,15 +82,16 @@ anim:0
 };
 
 // INPUT
-let keys={},attack=false,showMap=false,showMenu=false;
+let keys={},attack=false;
 
 document.addEventListener("keydown",e=>{
 keys[e.key]=true;
 if(e.key===" ") attack=true;
-if(e.key==="m") showMap=!showMap;
-if(e.key==="p") showMenu=!showMenu;
 });
 document.addEventListener("keyup",e=>keys[e.key]=false);
+
+// PROYECTILES
+let projectiles=[];
 
 // OBJETOS
 let trees=[...Array(300)].map(()=>({x:Math.random()*MAP,y:Math.random()*MAP}));
@@ -98,26 +99,32 @@ let rocks=[...Array(150)].map(()=>({x:Math.random()*MAP,y:Math.random()*MAP}));
 
 let lakes=[
 {x:3000,y:3000,w:800,h:800},
-{x:1000,y:2000,w:200,h:200},
-{x:3500,y:1000,w:300,h:200}
+{x:1000,y:2000,w:200,h:200}
 ];
 
+// CIUDADES
 let cities=[
-{x:800,y:800,r:300},
+{x:800,y:800,r:400},
 {x:4000,y:4000,r:400}
 ];
 
+// CAMINOS
+let roads=[
+{x1:800,y1:800,x2:4000,y2:4000}
+];
+
 // NPC
-let npcs=[...Array(20)].map(()=>({
+let npcs=[...Array(30)].map(()=>({
 x:800+Math.random()*200,
 y:800+Math.random()*200
 }));
 
-// ENEMIGOS
-let enemies=[...Array(80)].map(()=>({
+// ENEMIGOS (lobos y osos)
+let enemies=[...Array(60)].map(()=>({
 x:Math.random()*MAP,
 y:Math.random()*MAP,
-hp:50
+hp:50,
+type:Math.random()>0.5?"wolf":"bear"
 }));
 
 // COLISION
@@ -132,6 +139,11 @@ for(let l of lakes){
 if(x>l.x && x<l.x+l.w && y>l.y && y<l.y+l.h) return true;
 }
 return false;
+}
+
+// CIUDAD CHECK
+function inCity(x,y){
+return cities.some(c=>Math.hypot(x-c.x,y-c.y)<c.r);
 }
 
 // UPDATE
@@ -150,66 +162,99 @@ player.y=ny;
 player.anim+=0.3;
 }
 
-// CLASE POR KARMA
+// CLASE
 if(player.karma>20) player.class="paladin";
 else if(player.karma<-20) player.class="oscuro";
 else player.class="neutral";
 
-// NPC movimiento
-npcs.forEach(n=>{
-n.x+=Math.sin(Date.now()/1000)*0.2;
+// ATAQUE → dispara proyectil
+if(attack){
+projectiles.push({
+x:player.x,
+y:player.y,
+dx:0,
+dy:-6
 });
+attack=false;
+}
+
+// PROYECTILES
+projectiles.forEach(p=>{
+p.x+=p.dx;
+p.y+=p.dy;
+
+// daño
+enemies.forEach(e=>{
+if(Math.hypot(p.x-e.x,p.y-e.y)<20){
+e.hp-=20;
+p.hit=true;
+}
+});
+});
+
+projectiles = projectiles.filter(p=>!p.hit);
 
 // ENEMIGOS
 enemies.forEach(e=>{
+
+// no entrar a ciudades
+if(inCity(e.x,e.y)) return;
+
 let dx=player.x-e.x;
 let dy=player.y-e.y;
 let d=Math.hypot(dx,dy);
 
 if(d<200){
-e.x+=dx/d;
-e.y+=dy/d;
+let speed = e.type==="wolf"?2:1;
+e.x+=dx/d*speed;
+e.y+=dy/d*speed;
 }
 
 if(d<25){
-player.hp-=0.1;
+player.hp-= e.type==="bear"?0.3:0.1;
 }
 });
 
-// ATAQUE
-if(attack){
-enemies.forEach(e=>{
-if(Math.hypot(e.x-player.x,e.y-player.y)<60){
-e.hp-=10;
-}
-});
-attack=false;
-}
-
-// MUERTE ENEMIGO
+// MUERTE
 enemies=enemies.filter(e=>{
 if(e.hp<=0){
-player.inv["💎"]=(player.inv["💎"]||0)+1;
+player.inv["🦴"]=(player.inv["🦴"]||0)+1;
 return false;
 }
 return true;
 });
 }
 
-// DIBUJAR PERSONAJE
+// PERSONAJE DETALLADO
 function drawChar(x,y,color){
-let off=Math.sin(player.anim)*4;
+
+let off=Math.sin(player.anim)*3;
 
 ctx.fillStyle=color;
-ctx.fillRect(x,y+off,20,20);
 
+// cuerpo
+ctx.fillRect(x,y+off,16,20);
+
+// cabeza
 ctx.fillStyle="#ffcc99";
-ctx.fillRect(x+5,y-10+off,10,10);
+ctx.fillRect(x+4,y-8+off,8,8);
 
 // piernas
 ctx.fillStyle="white";
-ctx.fillRect(x+2,y+20+Math.sin(player.anim)*4,4,8);
-ctx.fillRect(x+14,y+20-Math.sin(player.anim)*4,4,8);
+ctx.fillRect(x+2,y+20+Math.sin(player.anim)*3,4,6);
+ctx.fillRect(x+10,y+20-Math.sin(player.anim)*3,4,6);
+}
+
+// MONSTRUOS
+function drawMonster(e,x,y){
+if(e.type==="wolf"){
+ctx.fillStyle="gray";
+ctx.fillRect(x,y,18,10);
+}
+else{
+ctx.fillStyle="brown";
+ctx.fillRect(x,y,22,14);
+}
 }
 
 // DRAW
@@ -217,16 +262,34 @@ function draw(){
 
 ctx.clearRect(0,0,900,500);
 
-// FONDO
+// fondo
 ctx.fillStyle="#2e8b57";
 ctx.fillRect(0,0,900,500);
 
+// CAMINOS
+ctx.strokeStyle="#c2b280";
+ctx.lineWidth=6;
+roads.forEach(r=>{
+ctx.beginPath();
+ctx.moveTo(r.x1-player.x+450,r.y1-player.y+250);
+ctx.lineTo(r.x2-player.x+450,r.y2-player.y+250);
+ctx.stroke();
+});
+
 // CIUDADES
 cities.forEach(c=>{
-ctx.fillStyle="rgba(0,255,255,0.3)";
+ctx.fillStyle="rgba(0,255,255,0.2)";
 ctx.beginPath();
 ctx.arc(c.x-player.x+450,c.y-player.y+250,c.r,0,Math.PI*2);
 ctx.fill();
+
+// muralla
+ctx.strokeStyle="#555";
+ctx.strokeRect(
+c.x-player.x+450-c.r/2,
+c.y-player.y+250-c.r/2,
+c.r,c.r
+);
 });
 
 // LAGOS
@@ -235,18 +298,16 @@ ctx.fillStyle="blue";
 ctx.fillRect(l.x-player.x+450,l.y-player.y+250,l.w,l.h);
 });
 
-// ROCAS
-rocks.forEach(r=>{
-ctx.fillStyle="gray";
-ctx.beginPath();
-ctx.arc(r.x-player.x+450,r.y-player.y+250,20,0,Math.PI*2);
-ctx.fill();
-});
-
-// ARBOLES
+// ÁRBOLES
 trees.forEach(t=>{
 ctx.fillStyle="green";
 ctx.fillRect(t.x-player.x+450,t.y-player.y+250,10,10);
+});
+
+// ROCAS
+rocks.forEach(r=>{
+ctx.fillStyle="gray";
+ctx.fillRect(r.x-player.x+450,r.y-player.y+250,12,12);
 });
 
 // NPC
@@ -256,13 +317,19 @@ drawChar(n.x-player.x+450,n.y-player.y+250,"yellow");
 
 // ENEMIGOS
 enemies.forEach(e=>{
-drawChar(e.x-player.x+450,e.y-player.y+250,"purple");
+drawMonster(e,e.x-player.x+450,e.y-player.y+250);
 
 // HP
 ctx.fillStyle="red";
 ctx.fillRect(e.x-player.x+450,e.y-player.y+240,20,3);
 ctx.fillStyle="lime";
 ctx.fillRect(e.x-player.x+450,e.y-player.y+240,(e.hp/50)*20,3);
+});
+
+// PROYECTILES
+projectiles.forEach(p=>{
+ctx.fillStyle="orange";
+ctx.fillRect(p.x-player.x+450,p.y-player.y+250,4,4);
 });
 
 // PLAYER
@@ -272,51 +339,11 @@ if(player.class==="oscuro") color="purple";
 
 drawChar(450,250,color);
 
-// HP PLAYER
+// UI
 ctx.fillStyle="red";
 ctx.fillRect(20,20,200,10);
 ctx.fillStyle="lime";
 ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
-
-// MANA
-ctx.fillStyle="blue";
-ctx.fillRect(20,40,(player.mana/player.maxMana)*200,10);
-}
-
-// INVENTARIO
-function drawInv(){
-inventory.innerHTML="";
-for(let k in player.inv){
-let d=document.createElement("div");
-d.className="slot";
-d.innerHTML=k+" x"+player.inv[k];
-inventory.appendChild(d);
-}
-}
-
-// MINIMAPA
-function drawMini(){
-mini.fillStyle="black";
-mini.fillRect(0,0,150,150);
-
-mini.fillStyle="blue";
-mini.fillRect(75,75,3,3);
-
-enemies.forEach(e=>{
-mini.fillStyle="red";
-mini.fillRect((e.x/MAP)*150,(e.y/MAP)*150,2,2);
-});
-}
-
-// MENU
-function drawMenu(){
-menu.style.display=showMenu?"block":"none";
-menu.innerHTML=`
-Clase: ${player.class}<br>
-HP: ${player.hp}<br>
-Mana: ${player.mana}<br>
-Karma: ${player.karma}
-`;
 }
 
 // LOOP
@@ -325,7 +352,6 @@ update();
 draw();
 drawInv();
 drawMini();
-drawMenu();
 requestAnimationFrame(loop);
 }
 
