@@ -2,200 +2,183 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RPG PRO ULTRA</title>
+<title>RPG WORLD</title>
 
 <style>
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:20px; }
 
+#minimap { position:fixed; top:10px; right:10px; border:2px solid white; }
+#worldmap { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); display:none; border:2px solid white; }
+
 #inventory {
-position: fixed;
-bottom: 10px;
-left: 50%;
-transform: translateX(-50%);
-display: grid;
-grid-template-columns: repeat(8, 50px);
-gap: 5px;
+position:fixed; bottom:10px; left:50%; transform:translateX(-50%);
+display:grid; grid-template-columns:repeat(8,50px); gap:5px;
 }
 
 .slot {
-width: 50px;
-height: 50px;
-background: #222;
-border: 2px solid #555;
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
-font-size:12px;
-cursor:pointer;
-}
-
-#stats {
-position: fixed;
-right: 10px;
-top: 50px;
-background:#111;
-border:2px solid #777;
-padding:10px;
-display:none;
-}
-
-#minimap {
-position: fixed;
-top: 10px;
-right: 10px;
-background:black;
-border:2px solid white;
+width:50px;height:50px;background:#222;border:1px solid #555;
+display:flex;align-items:center;justify-content:center;flex-direction:column;
+font-size:12px;cursor:pointer;
 }
 </style>
 </head>
 
 <body>
 
-<h2>🌍 RPG PRO ULTRA</h2>
-<p id="info"></p>
+<h2>🌍 RPG WORLD</h2>
 
-<canvas id="game" width="600" height="400"></canvas>
+<canvas id="game" width="700" height="450"></canvas>
 <canvas id="minimap" width="150" height="150"></canvas>
+<canvas id="worldmap" width="400" height="400"></canvas>
 
 <div id="inventory"></div>
-<div id="stats"></div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const mini = document.getElementById("minimap");
-const mtx = mini.getContext("2d");
+const W=4000,H=4000;
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+const mini=document.getElementById("minimap");
+const mtx=mini.getContext("2d");
+
+const worldmap=document.getElementById("worldmap");
+const wtx=worldmap.getContext("2d");
 
 // jugador
-let player = {
-x:1000,y:1000,
-hp:100,maxHp:100,
-mana:100,maxMana:100,
-kills:0,
-inventory:{}
-};
-
-// animación
-let keys={}, moving=false, anim=0;
-let attack=false, skillQ=false, skillE=false, attackAnim=0;
+let player={x:2000,y:2000,hp:100,mana:100,karma:0,inv:{}};
 
 // clases
 function getClass(){
-if(player.kills>40) return "oscuro";
-if(player.kills>20) return "mago";
-return "paladin";
+if(player.karma>20) return "paladin";
+if(player.karma<-20) return "oscuro";
+return "neutral";
 }
 
-// zonas
-const cities=[{x:1000,y:1000,r:200},{x:400,y:400,r:150}];
-const dangerZone={x:1600,y:1600,r:600};
+// ciudades y pueblos
+let cities=[
+{x:800,y:800,r:250,type:"city"},
+{x:3000,y:700,r:250,type:"city"},
+{x:1000,y:3000,r:120,type:"town"},
+{x:3200,y:2800,r:120,type:"town"}
+];
 
-// lago grande
-const lake={x:1500,y:0,w:500,h:800};
+// zonas peligrosas
+let dangerZones=[
+{x:2000,y:2000,r:500},
+{x:3500,y:1500,r:400}
+];
 
-// objetos
-let trees=[],rocks=[],npcs=[],enemies=[],bullets=[];
+// caminos
+let roads=[
+{x1:800,y1:800,x2:3000,y2:700},
+{x1:800,y1:800,x2:1000,y2:3000}
+];
 
-// generar mundo
-for(let i=0;i<100;i++) trees.push({x:Math.random()*2000,y:Math.random()*2000});
-for(let i=0;i<70;i++) rocks.push({x:Math.random()*2000,y:Math.random()*2000});
+// bosques
+let trees=[];
+for(let i=0;i<200;i++){
+let cx=Math.random()*W, cy=Math.random()*H;
+for(let j=0;j<5;j++){
+trees.push({x:cx+Math.random()*80,y:cy+Math.random()*80,hp:30});
+}
+}
 
-// npc en ciudades
+// montañas
+let mountains=[];
+for(let i=0;i<40;i++){
+mountains.push({x:Math.random()*W,y:Math.random()*H});
+}
+
+// lagos
+let lakes=[
+{x:3000,y:0,w:800,h:800}, // grande
+{x:500,y:2000,w:200,h:200},
+{x:2000,y:3500,w:200,h:200}
+];
+
+// npc
+let npcs=[];
 cities.forEach(c=>{
-for(let i=0;i<5;i++){
+let count=c.type==="city"?15:5;
+for(let i=0;i<count;i++){
 npcs.push({
-x:c.x+(Math.random()-0.5)*100,
-y:c.y+(Math.random()-0.5)*100
+x:c.x+(Math.random()-0.5)*c.r,
+y:c.y+(Math.random()-0.5)*c.r,
+home:c
 });
 }
 });
 
 // enemigos
-for(let i=0;i<60;i++){
-enemies.push({
-x:Math.random()*2000,
-y:Math.random()*2000,
-hp:50
-});
+let enemies=[];
+function spawnEnemy(x,y,type){
+enemies.push({x,y,hp:type==="boss"?200:type==="elite"?100:50,type});
+}
+
+// spawn inicial
+for(let i=0;i<80;i++){
+spawnEnemy(Math.random()*W,Math.random()*H,"normal");
 }
 
 // controles
+let keys={},attack=false;
 document.addEventListener("keydown",e=>{
 keys[e.key]=true;
-if(e.key===" ") {attack=true; attackAnim=10;}
-if(e.key==="q") skillQ=true;
-if(e.key==="e") skillE=true;
-
-if(e.key==="p"){
-let s=document.getElementById("stats");
-s.style.display=s.style.display==="none"?"block":"none";
+if(e.key===" ") attack=true;
+if(e.key==="m"){
+worldmap.style.display=worldmap.style.display==="none"?"block":"none";
 }
 });
-
 document.addEventListener("keyup",e=>keys[e.key]=false);
-
-// inventario
-function addItem(item){
-player.inventory[item]=(player.inventory[item]||0)+1;
-}
-
-function drawInventory(){
-let inv=document.getElementById("inventory");
-inv.innerHTML="";
-Object.keys(player.inventory).forEach(item=>{
-let d=document.createElement("div");
-d.className="slot";
-d.innerHTML=item+"<br>x"+player.inventory[item];
-
-d.onclick=()=>{
-player.inventory[item]--;
-if(player.inventory[item]<=0) delete player.inventory[item];
-
-if(item==="🧪"){
-player.hp=Math.min(player.hp+20,player.maxHp);
-}
-};
-
-inv.appendChild(d);
-});
-}
 
 // update
 function update(){
 
-moving=false;
-
+// movimiento
 let nx=player.x, ny=player.y;
+if(keys["w"]) ny-=4;
+if(keys["s"]) ny+=4;
+if(keys["a"]) nx-=4;
+if(keys["d"]) nx+=4;
 
-if(keys["w"]){ny-=4; moving=true;}
-if(keys["s"]){ny+=4; moving=true;}
-if(keys["a"]){nx-=4; moving=true;}
-if(keys["d"]){nx+=4; moving=true;}
+// colisiones montañas
+let blocked=false;
+mountains.forEach(m=>{
+if(Math.hypot(nx-m.x,ny-m.y)<60) blocked=true;
+});
 
-// lago bloquea
-if(!(nx>lake.x && nx<lake.x+lake.w && ny>lake.y && ny<lake.y+lake.h)){
-player.x=nx; player.y=ny;
+// agua profunda
+lakes.forEach(l=>{
+if(nx>l.x && nx<l.x+l.w && ny>l.y && ny<l.y+l.h){
+if(l.w>500) blocked=true; // lago grande bloquea
 }
+});
 
-// animación caminar
-if(moving) anim+=0.3;
+if(!blocked){player.x=nx;player.y=ny;}
 
-// enemigos
+// npc movimiento
+npcs.forEach(n=>{
+n.x+=Math.random()-0.5;
+n.y+=Math.random()-0.5;
+});
+
+// enemigos IA
 enemies.forEach(e=>{
 let dx=player.x-e.x;
 let dy=player.y-e.y;
 let dist=Math.hypot(dx,dy);
+
+// no entrar ciudad
+let inCity=cities.some(c=>Math.hypot(e.x-c.x,e.y-c.y)<c.r);
+if(inCity) return;
 
 if(dist<200){
 e.x+=dx/dist;
 e.y+=dy/dist;
 }
 
-if(dist<30){
-player.hp-=0.2;
-}
+if(dist<30) player.hp-=0.1;
 });
 
 // combate
@@ -208,168 +191,87 @@ e.hp-=10;
 attack=false;
 }
 
-if(skillQ && player.mana>10){
-bullets.push({x:player.x,y:player.y,vx:5,vy:0});
-player.mana-=10;
-skillQ=false;
-}
+// eliminar muertos
+enemies=enemies.filter(e=>e.hp>0);
 
-if(skillE){
-enemies.forEach(e=>{
-if(Math.hypot(e.x-player.x,e.y-player.y)<120){
-e.hp-=8;
-}
-});
-skillE=false;
-}
-
-// balas
-bullets.forEach(b=>{
-b.x+=b.vx;
-enemies.forEach(e=>{
-if(Math.hypot(e.x-b.x,e.y-b.y)<20){
-e.hp-=15;
-b.hit=true;
-}
-});
-});
-bullets=bullets.filter(b=>!b.hit);
-
-// muerte enemigos
-enemies=enemies.filter(e=>{
-if(e.hp<=0){
-player.kills++;
-if(Math.random()<0.5) addItem("💎");
-return false;
-}
-return true;
-});
-
-// mana regen
-player.mana=Math.min(player.mana+0.1,player.maxMana);
-
-if(attackAnim>0) attackAnim--;
 }
 
 // draw
 function draw(){
 
-ctx.clearRect(0,0,600,400);
+ctx.clearRect(0,0,700,450);
 
 // fondo
 ctx.fillStyle="#2e8b57";
-ctx.fillRect(0,0,600,400);
+ctx.fillRect(0,0,700,450);
 
-// lago
-ctx.fillStyle="blue";
-ctx.fillRect(lake.x-player.x+300,lake.y-player.y+200,lake.w,lake.h);
+// caminos
+ctx.strokeStyle="#c2b280";
+roads.forEach(r=>{
+ctx.beginPath();
+ctx.moveTo(r.x1-player.x+350,r.y1-player.y+225);
+ctx.lineTo(r.x2-player.x+350,r.y2-player.y+225);
+ctx.stroke();
+});
+
+// lagos
+lakes.forEach(l=>{
+ctx.fillStyle=l.w>500?"darkblue":"lightblue";
+ctx.fillRect(l.x-player.x+350,l.y-player.y+225,l.w,l.h);
+});
+
+// montañas
+mountains.forEach(m=>{
+ctx.fillStyle="white";
+ctx.beginPath();
+ctx.arc(m.x-player.x+350,m.y-player.y+225,50,0,Math.PI*2);
+ctx.fill();
+});
+
+// árboles
+trees.forEach(t=>{
+ctx.fillStyle="green";
+ctx.fillRect(t.x-player.x+350,t.y-player.y+225,20,20);
+});
 
 // ciudades
 cities.forEach(c=>{
 ctx.strokeStyle="white";
-ctx.strokeRect(c.x-player.x+300-100,c.y-player.y+200-100,200,200);
+ctx.strokeRect(c.x-player.x+350-c.r/2,c.y-player.y+225-c.r/2,c.r,c.r);
 });
 
 // npc
 npcs.forEach(n=>{
-ctx.fillStyle="green";
-ctx.fillRect(n.x-player.x+300,n.y-player.y+200,10,10);
+ctx.fillStyle="yellow";
+ctx.fillRect(n.x-player.x+350,n.y-player.y+225,10,10);
 });
 
 // enemigos
 enemies.forEach(e=>{
-ctx.fillStyle="purple";
-ctx.fillRect(e.x-player.x+300,e.y-player.y+200,20,20);
-
-// HP
-ctx.fillStyle="red";
-ctx.fillRect(e.x-player.x+300,e.y-player.y+190,20,3);
-ctx.fillStyle="lime";
-ctx.fillRect(e.x-player.x+300,e.y-player.y+190,(e.hp/50)*20,3);
+ctx.fillStyle=e.type==="elite"?"red":e.type==="boss"?"black":"purple";
+ctx.fillRect(e.x-player.x+350,e.y-player.y+225,20,20);
 });
-
-// proyectiles
-ctx.fillStyle="yellow";
-bullets.forEach(b=>{
-ctx.fillRect(b.x-player.x+300,b.y-player.y+200,5,5);
-});
-
-// jugador animado
-let offset=Math.sin(anim)*5;
-
-ctx.fillStyle="cyan";
-ctx.fillRect(300,200+offset,20,20);
-
-// cabeza
-ctx.fillStyle="#ffcc99";
-ctx.fillRect(305,190+offset,10,10);
-
-// piernas
-ctx.fillStyle="white";
-ctx.fillRect(302,220+Math.sin(anim)*5,5,10);
-ctx.fillRect(312,220-Math.sin(anim)*5,5,10);
-
-// ataque animación
-if(attackAnim>0){
-ctx.strokeStyle="yellow";
-ctx.beginPath();
-ctx.arc(310,210,attackAnim*2,0,Math.PI*2);
-ctx.stroke();
-}
-
-// barras
-ctx.fillStyle="red";
-ctx.fillRect(20,20,200,10);
-ctx.fillStyle="lime";
-ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
-
-ctx.fillStyle="blue";
-ctx.fillRect(20,40,200,10);
-ctx.fillStyle="cyan";
-ctx.fillRect(20,40,(player.mana/player.maxMana)*200,10);
-
-// info
-document.getElementById("info").innerText =
-"Clase:"+getClass()+" | Kills:"+player.kills;
-}
-
-// minimapa
-function drawMini(){
-mtx.clearRect(0,0,150,150);
-
-mtx.fillStyle="black";
-mtx.fillRect(0,0,150,150);
 
 // jugador
+ctx.fillStyle="cyan";
+ctx.fillRect(350,225,20,20);
+
+// minimapa
+mtx.clearRect(0,0,150,150);
 mtx.fillStyle="blue";
 mtx.fillRect(75,75,4,4);
 
-// npc
-mtx.fillStyle="green";
-npcs.forEach(n=>{
-mtx.fillRect(n.x/2000*150,n.y/2000*150,3,3);
-});
+// worldmap
+wtx.clearRect(0,0,400,400);
+wtx.fillStyle="blue";
+wtx.fillRect(player.x/W*400,player.y/H*400,5,5);
 
-// enemigos
-mtx.fillStyle="red";
-enemies.forEach(e=>{
-mtx.fillRect(e.x/2000*150,e.y/2000*150,2,2);
-});
-}
-
-// stats
-function drawStats(){
-document.getElementById("stats").innerHTML=
-"HP:"+player.hp+"<br>Mana:"+player.mana+"<br>Kills:"+player.kills+"<br>Clase:"+getClass();
 }
 
 // loop
 function loop(){
 update();
 draw();
-drawMini();
-drawInventory();
-drawStats();
 requestAnimationFrame(loop);
 }
 
