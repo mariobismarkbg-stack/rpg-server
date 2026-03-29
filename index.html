@@ -211,15 +211,19 @@ const flowers = Array.from({length:200}, () => ({
 }));
 
 const lakes = [
-  {x:2800,y:2800,w:600,h:500},
-  {x:900,y:2200,w:250,h:200},
-  {x:3800,y:1200,w:350,h:280}
+  {x:2800,y:2800,w:600,h:500,canWalkThrough:true},
+  {x:900,y:2200,w:250,h:200,canWalkThrough:true},
+  {x:3800,y:1200,w:350,h:280,canWalkThrough:true},
+  {x:1500,y:4000,w:400,h:300,canWalkThrough:true}
 ];
 
 const cities = [
-  {x:800,y:800,r:350,name:"Aldea del Sol"},
-  {x:4200,y:4200,r:400,name:"Ciudad Oscura"},
-  {x:2500,y:500,r:250,name:"Puerto Norte"}
+  {x:800,y:800,r:280,name:"Aldea del Sol",type:"Pueblo pequeño",isCapital:false},
+  {x:2500,y:500,r:320,name:"Puerto Norte",type:"Pueblo costero",isCapital:false},
+  {x:4200,y:4200,r:450,name:"Ciudad Oscura",type:"Ciudad Capital",isCapital:true},
+  {x:700,y:3500,r:250,name:"Santuario",type:"Zona Sagrada",isCapital:false},
+  {x:4500,y:800,r:300,name:"Fortaleza",type:"Fuerte Militar",isCapital:false},
+  {x:2000,y:2200,r:200,name:"Templo Antiguo",type:"Ruinas",isCapital:false}
 ];
 
 const roads = [
@@ -297,9 +301,13 @@ function collide(x,y) {
   if (x<10||y<10||x>MAP-10||y>MAP-10) return true;
   for (let t of trees) { if (Math.hypot(x-t.x,y-t.y)<10) return true; }
   for (let r of rocks) { if (Math.hypot(x-r.x,y-r.y)<r.size*0.5) return true; }
-  for (let l of lakes) { if (x>l.x+5&&x<l.x+l.w-5&&y>l.y+5&&y<l.y+l.h-5) return true; }
+  // lakes are collidable but can be walked through slowly
   for (let b of buildings) { if (x>b.x&&x<b.x+b.w&&y>b.y&&y<b.y+b.h) return true; }
   return false;
+}
+
+function isInWater(x,y) {
+  return lakes.some(l => x>l.x+5&&x<l.x+l.w-5&&y>l.y+5&&y<l.y+l.h-5);
 }
 
 function showNotification(text) {
@@ -354,6 +362,9 @@ function update() {
   if(keys["s"]||keys["arrowdown"]){ny+=speed;player.dir=2;moving=true;}
   if(keys["a"]||keys["arrowleft"]){nx-=speed;player.dir=3;moving=true;}
   if(keys["d"]||keys["arrowright"]){nx+=speed;player.dir=1;moving=true;}
+
+  // water slows movement
+  if(isInWater(nx,ny)) { speed*=0.4; }
 
   if(!collide(nx,ny)){player.x=nx;player.y=ny;}
   else if(!collide(nx,player.y)){player.x=nx;}
@@ -424,10 +435,11 @@ function update() {
     let chaseRange=e.type==="wolf"?250:180;
     let spd=e.type==="wolf"?2.2:1.2;
 
-    if(d<chaseRange && !inCity(e.x,e.y)){
+    // enemies cannot enter cities or water
+    if(d<chaseRange && !inCity(e.x,e.y) && !isInWater(e.x,e.y)){
       let nx2=e.x+dx/d*spd;
       let ny2=e.y+dy/d*spd;
-      if(!inCity(nx2,ny2)){e.x=nx2;e.y=ny2;}
+      if(!inCity(nx2,ny2) && !isInWater(nx2,ny2)){e.x=nx2;e.y=ny2;}
     } else {
       // wander
       e.x+=Math.sin(e.anim*0.5)*0.5;
@@ -517,15 +529,15 @@ function draw(){
 
   ctx.clearRect(0,0,W,H);
 
-  // sky/ground gradient
-  ctx.fillStyle='#1a2a15';
+  // grass background
+  ctx.fillStyle='#0f2010';
   ctx.fillRect(0,0,W,H);
 
-  // grass texture
-  ctx.fillStyle='#1e3018';
-  for(let gx=Math.floor(camX/80)*80;gx<camX+W;gx+=80){
-    for(let gy=Math.floor(camY/80)*80;gy<camY+H;gy+=80){
-      ctx.fillRect(gx-camX,gy-camY,40,40);
+  // grass texture pattern
+  ctx.fillStyle='#1a3020';
+  for(let gx=Math.floor(camX/100)*100;gx<camX+W+100;gx+=100){
+    for(let gy=Math.floor(camY/100)*100;gy<camY+H+100;gy+=100){
+      ctx.fillRect(gx-camX,gy-camY,50,50);
     }
   }
 
@@ -547,36 +559,53 @@ function draw(){
     ctx.stroke();
   });
 
-  // cities ground
+  // cities ground with strong visibility
   cities.forEach(c=>{
-    let grd=ctx.createRadialGradient(c.x-camX,c.y-camY,0,c.x-camX,c.y-camY,c.r);
-    grd.addColorStop(0,'#3a3025');
-    grd.addColorStop(1,'transparent');
-    ctx.fillStyle=grd;
+    // city circle base - BRIGHT
+    ctx.fillStyle=c.isCapital?'#4a3020':'#3a3025';
     ctx.beginPath();
     ctx.arc(c.x-camX,c.y-camY,c.r,0,Math.PI*2);
     ctx.fill();
+    
+    // city border
+    ctx.strokeStyle=c.isCapital?'#8a6a3a':'#6a5a3a';
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.arc(c.x-camX,c.y-camY,c.r,0,Math.PI*2);
+    ctx.stroke();
 
-    // city name
-    ctx.fillStyle='#c9a84c88';
-    ctx.font='bold 14px Cinzel, serif';
+    // city name - BRIGHT AND VISIBLE
+    ctx.fillStyle=c.isCapital?'#ffd700':'#c9a84c';
+    ctx.font='bold 16px Cinzel, serif';
     ctx.textAlign='center';
-    ctx.fillText(c.name,c.x-camX,c.y-camY-c.r+20);
+    ctx.shadowColor='rgba(0,0,0,0.8)';
+    ctx.shadowBlur=4;
+    ctx.fillText(c.name,c.x-camX,c.y-camY-c.r+30);
+    ctx.shadowBlur=0;
+    
+    // city type indicator
+    ctx.fillStyle=c.isCapital?'#ffd700':'#aaa';
+    ctx.font='12px Almendra, serif';
+    ctx.fillText(c.type,c.x-camX,c.y-camY+20);
   });
 
-  // lakes
+  // lakes - bright water
   lakes.forEach(l=>{
-    ctx.fillStyle='#1a3a6a';
+    ctx.fillStyle='#1a4a8a';
     ctx.fillRect(l.x-camX,l.y-camY,l.w,l.h);
-    // shimmer
-    ctx.fillStyle='#2a5a9a22';
-    for(let i=0;i<5;i++){
+    // water shimmer
+    ctx.fillStyle='#2a6aaa44';
+    for(let i=0;i<8;i++){
       let sx=l.x+Math.sin(Date.now()/1000+i)*l.w*0.3+l.w*0.5;
       let sy=l.y+Math.cos(Date.now()/800+i*2)*l.h*0.3+l.h*0.5;
       ctx.beginPath();
       ctx.arc(sx-camX,sy-camY,15+Math.sin(Date.now()/500+i)*5,0,Math.PI*2);
       ctx.fill();
     }
+    // water warning border
+    ctx.strokeStyle='#1a3a6a88';
+    ctx.lineWidth=2;
+    ctx.strokeRect(l.x-camX,l.y-camY,l.w,l.h);
   });
 
   // flowers
@@ -865,5 +894,5 @@ function loop(){
 updateInventory();
 loop();
 </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e3c0e072082e710',t:'MTc3NDc1Nzc0MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e3c1a0e21ae4c33',t:'MTc3NDc1ODIzMy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
