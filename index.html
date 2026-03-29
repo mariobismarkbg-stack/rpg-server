@@ -8,7 +8,6 @@
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:20px; }
 
-/* INVENTARIO */
 #inventory {
     position: fixed;
     bottom: 10px;
@@ -27,7 +26,7 @@ canvas { background:#111; margin-top:20px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 16px;
     flex-direction: column;
 }
 </style>
@@ -50,10 +49,6 @@ let ws;
 let players = {};
 let myKarma = 0;
 
-// zonas
-const safeZone = { x: 1000, y: 1000, r: 200 };
-const darkZone = { x: 1400, y: 1400, r: 200 };
-
 function conectar() {
     ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
 
@@ -72,7 +67,6 @@ function conectar() {
 
             for (let id in players) {
                 let p = players[id];
-
                 let dx = p.x - player.x;
                 let dy = p.y - player.y;
                 let dist = Math.sqrt(dx*dx + dy*dy);
@@ -82,11 +76,9 @@ function conectar() {
                     break;
                 }
             }
-
         } catch {}
     };
 }
-
 conectar();
 
 // jugador
@@ -104,11 +96,39 @@ let moving = false;
 let attack = false;
 let attackAnim = 0;
 
-// enemigos
-let enemies = [
-    { x: 900, y: 900, hp: 50 },
-    { x: 1100, y: 1100, hp: 50 }
-];
+// enemigos con movimiento
+let enemies = [];
+for (let i = 0; i < 10; i++) {
+    enemies.push({
+        x: Math.random()*2000,
+        y: Math.random()*2000,
+        hp: 50,
+        dirX: (Math.random()-0.5)*2,
+        dirY: (Math.random()-0.5)*2
+    });
+}
+
+// mundo
+let trees = [];
+let rocks = [];
+let waterZones = [];
+
+for (let i = 0; i < 50; i++) {
+    trees.push({ x: Math.random()*2000, y: Math.random()*2000 });
+}
+
+for (let i = 0; i < 40; i++) {
+    rocks.push({ x: Math.random()*2000, y: Math.random()*2000 });
+}
+
+for (let i = 0; i < 3; i++) {
+    waterZones.push({
+        x: Math.random()*1800,
+        y: Math.random()*1800,
+        w: 200,
+        h: 200
+    });
+}
 
 // cámara
 let camera = { x: 0, y: 0 };
@@ -122,7 +142,6 @@ document.addEventListener("keydown", (e) => {
         attackAnim = 10;
     }
 });
-
 document.addEventListener("keyup", (e) => {
     keys[e.key] = false;
 });
@@ -144,17 +163,16 @@ function update() {
     // anim ataque
     if (attackAnim > 0) attackAnim--;
 
-    // zonas
-    let dxSafe = player.x - safeZone.x;
-    let dySafe = player.y - safeZone.y;
-    let inSafe = Math.sqrt(dxSafe*dxSafe + dySafe*dySafe) < safeZone.r;
+    // enemigos se mueven
+    enemies.forEach(e => {
+        e.x += e.dirX;
+        e.y += e.dirY;
 
-    if (inSafe) attack = false;
-
-    // clases
-    if (myKarma > 20) player.class = "paladin";
-    else if (myKarma < -20) player.class = "oscuro";
-    else player.class = "guerrero";
+        if (Math.random() < 0.01) {
+            e.dirX = (Math.random()-0.5)*2;
+            e.dirY = (Math.random()-0.5)*2;
+        }
+    });
 
     // combate
     if (attack) {
@@ -172,13 +190,13 @@ function update() {
                     e.y = Math.random()*2000;
 
                     const drops = ["🪵","🪨","💎","🧪"];
-                    let item = drops[Math.floor(Math.random()*drops.length)];
-                    player.inventory.push(item);
+                    player.inventory.push(drops[Math.floor(Math.random()*drops.length)]);
                 }
             }
         });
     }
 
+    // enviar server
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             x: player.x,
@@ -193,7 +211,7 @@ function update() {
     camera.y = player.y - canvas.height / 2;
 }
 
-// INVENTARIO
+// inventario
 function drawInventory() {
     const inv = document.getElementById("inventory");
     inv.innerHTML = "";
@@ -210,10 +228,7 @@ function drawInventory() {
         slot.className = "slot";
 
         if (items[i]) {
-            slot.innerHTML = `
-                <div>${items[i]}</div>
-                <div style="font-size:10px;">x${counts[items[i]]}</div>
-            `;
+            slot.innerHTML = `<div>${items[i]}</div><div style="font-size:10px;">x${counts[items[i]]}</div>`;
         }
 
         inv.appendChild(slot);
@@ -224,30 +239,32 @@ function drawInventory() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // fondo
     ctx.fillStyle = "#2e8b57";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // zonas
-    ctx.fillStyle = "rgba(0,255,0,0.2)";
-    ctx.beginPath();
-    ctx.arc(safeZone.x - camera.x, safeZone.y - camera.y, safeZone.r, 0, Math.PI*2);
-    ctx.fill();
+    // agua
+    waterZones.forEach(w => {
+        ctx.fillStyle = "rgba(0,100,255,0.5)";
+        ctx.fillRect(w.x - camera.x, w.y - camera.y, w.w, w.h);
+    });
 
     // árboles
-    ctx.fillStyle = "darkgreen";
-    ctx.fillRect(800 - camera.x, 900 - camera.y, 40, 40);
+    trees.forEach(t => {
+        ctx.fillStyle = "darkgreen";
+        ctx.fillRect(t.x - camera.x, t.y - camera.y, 30, 30);
+    });
 
-    // piedras
-    ctx.fillStyle = "gray";
-    ctx.fillRect(1100 - camera.x, 1000 - camera.y, 30, 30);
+    // rocas
+    rocks.forEach(r => {
+        ctx.fillStyle = "gray";
+        ctx.fillRect(r.x - camera.x, r.y - camera.y, 25, 25);
+    });
 
     // enemigos
     enemies.forEach(e => {
         ctx.fillStyle = "purple";
         ctx.fillRect(e.x - camera.x, e.y - camera.y, 20, 20);
 
-        // vida
         ctx.fillStyle = "red";
         ctx.fillRect(e.x - camera.x, e.y - camera.y - 10, e.hp, 4);
     });
@@ -255,18 +272,14 @@ function draw() {
     // jugador
     let offset = Math.sin(animFrame) * 5;
 
-    if (player.class === "paladin") ctx.fillStyle = "gold";
-    else if (player.class === "oscuro") ctx.fillStyle = "purple";
-    else ctx.fillStyle = "blue";
+    ctx.fillStyle = "blue";
 
-    // cuerpo
     ctx.fillRect(player.x - camera.x, player.y - camera.y + offset, 20, 20);
 
-    // piernas
     ctx.fillRect(player.x - camera.x + 2, player.y - camera.y + 20 + Math.sin(animFrame)*5, 5, 10);
     ctx.fillRect(player.x - camera.x + 12, player.y - camera.y + 20 - Math.sin(animFrame)*5, 5, 10);
 
-    // 💥 ataque visual
+    // ataque visual
     if (attackAnim > 0) {
         ctx.fillStyle = "yellow";
         ctx.beginPath();
@@ -275,9 +288,7 @@ function draw() {
     }
 
     document.getElementById("info").innerText =
-        "Clase: " + player.class +
-        " | Karma: " + myKarma +
-        " | Inventario: " + player.inventory.length;
+        "Inventario: " + player.inventory.length;
 }
 
 // loop
