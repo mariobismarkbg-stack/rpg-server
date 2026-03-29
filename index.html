@@ -8,7 +8,6 @@
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:20px; }
 
-/* INVENTARIO */
 #inventory {
     position: fixed;
     bottom: 10px;
@@ -31,7 +30,6 @@ canvas { background:#111; margin-top:20px; }
     flex-direction: column;
 }
 
-/* HABILIDADES */
 #skills {
     position: fixed;
     bottom: 80px;
@@ -49,8 +47,6 @@ canvas { background:#111; margin-top:20px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-direction: column;
-    font-size: 12px;
 }
 </style>
 </head>
@@ -58,14 +54,14 @@ canvas { background:#111; margin-top:20px; }
 <body>
 
 <h1>🌍 RPG Online PRO</h1>
-<p id="status">Conectando...</p>
+<p id="status">Jugando...</p>
 <p id="info"></p>
 
 <canvas id="game" width="600" height="400"></canvas>
 
 <div id="skills">
-    <div class="skill">Q<br>⚡</div>
-    <div class="skill">E<br>💥</div>
+    <div class="skill">Q ⚡</div>
+    <div class="skill">E 💥</div>
 </div>
 
 <div id="inventory"></div>
@@ -75,66 +71,65 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 // jugador
-let player = { x: 1000, y: 1000, speed: 4, inventory: [] };
+let player = {
+    x: 1000,
+    y: 1000,
+    speed: 4,
+    hp: 100,
+    maxHp: 100,
+    inventory: []
+};
 
-// animaciones
+// anim
 let animFrame = 0;
 let moving = false;
 let attack = false;
-let skillQ = false;
-let skillE = false;
 
 // mundo
-let trees = [];
-let rocks = [];
-let waterZones = [];
+let trees=[], rocks=[], waterZones=[];
 
-// 🌲 bosque GRANDE
-for (let i = 0; i < 120; i++) {
-    trees.push({ x: Math.random()*2000, y: Math.random()*2000, hp: 30, cut:false });
+for(let i=0;i<100;i++){
+    trees.push({x:Math.random()*2000,y:Math.random()*2000,hp:30,cut:false});
 }
 
-// 🪨 rocas
-for (let i = 0; i < 80; i++) {
-    rocks.push({ x: Math.random()*2000, y: Math.random()*2000 });
+for(let i=0;i<60;i++){
+    rocks.push({x:Math.random()*2000,y:Math.random()*2000});
 }
 
-// 🌊 agua GRANDE
-for (let i = 0; i < 5; i++) {
+for(let i=0;i<5;i++){
     waterZones.push({
-        x: Math.random()*1600,
-        y: Math.random()*1600,
-        w: 400,
-        h: 400,
-        deep: Math.random() > 0.5
+        x:Math.random()*1500,
+        y:Math.random()*1500,
+        w:400,
+        h:400,
+        deep:true
     });
 }
 
-// enemigos
-let enemies = [];
-for (let i = 0; i < 12; i++) {
+// enemigos con IA
+let enemies=[];
+for(let i=0;i<10;i++){
     enemies.push({
-        x: Math.random()*2000,
-        y: Math.random()*2000,
-        hp: 50,
-        dirX: (Math.random()-0.5)*2,
-        dirY: (Math.random()-0.5)*2
+        x:Math.random()*2000,
+        y:Math.random()*2000,
+        hp:50,
+        state:"idle",
+        dirX:(Math.random()-0.5)*2,
+        dirY:(Math.random()-0.5)*2,
+        attackCooldown:0
     });
 }
 
 // cámara
-let camera = { x: 0, y: 0 };
+let camera={x:0,y:0};
 
 // controles
-let keys = {};
-document.addEventListener("keydown", e => {
-    keys[e.key] = true;
-
-    if (e.key === " ") attack = true;
-    if (e.key === "q") skillQ = true;
-    if (e.key === "e") skillE = true;
+let keys={};
+document.addEventListener("keydown",e=>{
+    keys[e.key]=true;
+    if(e.key===" ") attack=true;
 });
-document.addEventListener("keyup", e => keys[e.key] = false);
+document.addEventListener("keyup",e=>keys[e.key]=false);
 
 // colisión
 function collide(x,y,ox,oy,size){
@@ -144,35 +139,27 @@ function collide(x,y,ox,oy,size){
 // update
 function update(){
 
-    let newX = player.x;
-    let newY = player.y;
-    moving = false;
+    let newX=player.x;
+    let newY=player.y;
+    moving=false;
 
-    if(keys["w"]){ newY -= player.speed; moving=true; }
-    if(keys["s"]){ newY += player.speed; moving=true; }
-    if(keys["a"]){ newX -= player.speed; moving=true; }
-    if(keys["d"]){ newX += player.speed; moving=true; }
+    if(keys["w"]){newY-=player.speed; moving=true;}
+    if(keys["s"]){newY+=player.speed; moving=true;}
+    if(keys["a"]){newX-=player.speed; moving=true;}
+    if(keys["d"]){newX+=player.speed; moving=true;}
 
     let blocked=false;
 
-    // árboles
     trees.forEach(t=>{
         if(!t.cut && collide(newX,newY,t.x,t.y,30)) blocked=true;
     });
 
-    // rocas
     rocks.forEach(r=>{
         if(collide(newX,newY,r.x,r.y,25)) blocked=true;
     });
 
-    // agua profunda
     waterZones.forEach(w=>{
-        if(w.deep &&
-            newX < w.x + w.w &&
-            newX + 20 > w.x &&
-            newY < w.y + w.h &&
-            newY + 20 > w.y
-        ){
+        if(newX<w.x+w.w && newX+20>w.x && newY<w.y+w.h && newY+20>w.y){
             blocked=true;
         }
     });
@@ -182,37 +169,66 @@ function update(){
         player.y=newY;
     }
 
-    if(moving) animFrame+=0.2; else animFrame=0;
+    if(moving) animFrame+=0.2;
+    else animFrame=0;
 
-    // enemigos se mueven
+    // 👾 IA enemigos
     enemies.forEach(e=>{
-        e.x+=e.dirX;
-        e.y+=e.dirY;
 
-        if(Math.random()<0.02){
-            e.dirX=(Math.random()-0.5)*2;
-            e.dirY=(Math.random()-0.5)*2;
+        let dx=player.x-e.x;
+        let dy=player.y-e.y;
+        let dist=Math.sqrt(dx*dx+dy*dy);
+
+        // DETECCIÓN
+        if(dist < 200){
+            e.state="chase";
+        } else if(dist > 250){
+            e.state="idle";
         }
+
+        // COMPORTAMIENTO
+        if(e.state==="chase"){
+            let angle=Math.atan2(dy,dx);
+            e.x += Math.cos(angle)*1.5;
+            e.y += Math.sin(angle)*1.5;
+        } else {
+            e.x += e.dirX;
+            e.y += e.dirY;
+
+            if(Math.random()<0.02){
+                e.dirX=(Math.random()-0.5)*2;
+                e.dirY=(Math.random()-0.5)*2;
+            }
+        }
+
+        // ATAQUE AL JUGADOR
+        if(dist < 30 && e.attackCooldown <= 0){
+            player.hp -= 5;
+            e.attackCooldown = 30;
+        }
+
+        if(e.attackCooldown > 0) e.attackCooldown--;
     });
 
-    // ATAQUES
-    if(attack || skillQ || skillE){
+    // MUERTE
+    if(player.hp <= 0){
+        player.hp = player.maxHp;
+        player.x = 1000;
+        player.y = 1000;
+        alert("💀 Has muerto!");
+    }
 
+    // ataque jugador
+    if(attack){
         enemies.forEach(e=>{
             let dx=e.x-player.x;
             let dy=e.y-player.y;
             let dist=Math.sqrt(dx*dx+dy*dy);
 
-            let range=60;
-            let dmg=10;
+            if(dist < 60){
+                e.hp -= 10;
 
-            if(skillQ){ range=100; dmg=20; }
-            if(skillE){ range=150; dmg=8; }
-
-            if(dist<range){
-                e.hp-=dmg;
-
-                if(e.hp<=0){
+                if(e.hp <= 0){
                     e.hp=50;
                     e.x=Math.random()*2000;
                     e.y=Math.random()*2000;
@@ -222,39 +238,20 @@ function update(){
                 }
             }
         });
-
-        // árboles
-        trees.forEach(t=>{
-            if(!t.cut){
-                let dx=t.x-player.x;
-                let dy=t.y-player.y;
-                let dist=Math.sqrt(dx*dx+dy*dy);
-
-                if(dist<60){
-                    t.hp-=10;
-                    if(t.hp<=0){
-                        t.cut=true;
-                        player.inventory.push("🪵");
-                    }
-                }
-            }
-        });
     }
 
     attack=false;
-    skillQ=false;
-    skillE=false;
 
-    camera.x = player.x - canvas.width/2;
-    camera.y = player.y - canvas.height/2;
+    camera.x=player.x-canvas.width/2;
+    camera.y=player.y-canvas.height/2;
 }
 
 // inventario
 function drawInventory(){
     const inv=document.getElementById("inventory");
     inv.innerHTML="";
-    let counts={};
 
+    let counts={};
     player.inventory.forEach(i=>counts[i]=(counts[i]||0)+1);
     let items=Object.keys(counts);
 
@@ -275,51 +272,54 @@ function draw(){
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // fondo
     ctx.fillStyle="#2e8b57";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
     // agua
     waterZones.forEach(w=>{
-        ctx.fillStyle = w.deep ? "rgba(0,0,150,0.7)" : "rgba(0,150,255,0.5)";
-        ctx.fillRect(w.x-camera.x, w.y-camera.y, w.w, w.h);
+        ctx.fillStyle="rgba(0,0,150,0.7)";
+        ctx.fillRect(w.x-camera.x,w.y-camera.y,w.w,w.h);
     });
 
-    // bosque
+    // árboles
     trees.forEach(t=>{
         if(!t.cut){
             ctx.fillStyle="darkgreen";
-            ctx.fillRect(t.x-camera.x, t.y-camera.y, 30,30);
+            ctx.fillRect(t.x-camera.x,t.y-camera.y,30,30);
         } else {
             ctx.fillStyle="brown";
-            ctx.fillRect(t.x-camera.x, t.y-camera.y, 20,10);
+            ctx.fillRect(t.x-camera.x,t.y-camera.y,20,10);
         }
     });
 
     // rocas
     rocks.forEach(r=>{
         ctx.fillStyle="gray";
-        ctx.fillRect(r.x-camera.x, r.y-camera.y, 25,25);
+        ctx.fillRect(r.x-camera.x,r.y-camera.y,25,25);
     });
 
     // enemigos
     enemies.forEach(e=>{
         ctx.fillStyle="purple";
-        ctx.fillRect(e.x-camera.x, e.y-camera.y, 20,20);
+        ctx.fillRect(e.x-camera.x,e.y-camera.y,20,20);
 
         ctx.fillStyle="red";
-        ctx.fillRect(e.x-camera.x, e.y-camera.y-8, e.hp, 4);
+        ctx.fillRect(e.x-camera.x,e.y-camera.y-8,e.hp,4);
     });
 
     // jugador
-    let offset=Math.sin(animFrame)*5;
-
     ctx.fillStyle="blue";
-    ctx.fillRect(player.x-camera.x, player.y-camera.y+offset, 20,20);
+    ctx.fillRect(player.x-camera.x,player.y-camera.y,20,20);
 
-    // UI
+    // ❤️ barra vida jugador
+    ctx.fillStyle="red";
+    ctx.fillRect(20,20,200,10);
+
+    ctx.fillStyle="lime";
+    ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
+
     document.getElementById("info").innerText =
-        "Inventario: "+player.inventory.length;
+        "HP: "+player.hp+" | Inventario: "+player.inventory.length;
 }
 
 // loop
