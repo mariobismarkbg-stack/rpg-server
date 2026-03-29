@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RPG PRO MAX</title>
+<title>RPG PRO FIXED</title>
 
 <style>
 body { background:black; color:white; text-align:center; }
@@ -28,36 +28,40 @@ align-items:center;
 justify-content:center;
 cursor:pointer;
 }
+
+#map {
+position: fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+background:#000;
+border:2px solid white;
+display:none;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🌍 RPG PRO MAX</h2>
+<h2>🌍 RPG PRO FIXED</h2>
 <p id="info"></p>
 
 <canvas id="game" width="600" height="400"></canvas>
+<canvas id="map" width="300" height="300"></canvas>
+
 <div id="inventory"></div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// jugador
-let player = {
-x:1000,y:1000,
-hp:100,maxHp:100,
-class:"neutral",
-inventory:["🧪"],
-kills:0
-};
+const mapCanvas = document.getElementById("map");
+const mapCtx = mapCanvas.getContext("2d");
 
-// clases
-function getClass(){
-if(player.kills > 30) return "paladin";
-if(player.kills > 10) return "mago";
-return "neutral";
-}
+// jugador
+let player = { x:1000,y:1000,hp:100,maxHp:100,inventory:["🧪"] };
+
+let keys={}, attack=false, attackAnim=0;
 
 // zonas
 const safeZones = [
@@ -67,48 +71,82 @@ const safeZones = [
 
 const dangerZone = {x:1600,y:1600,r:500};
 
+// árboles / rocas
+let trees=[], rocks=[];
+
+for(let i=0;i<80;i++){
+trees.push({x:Math.random()*2000,y:Math.random()*2000});
+}
+
+for(let i=0;i<50;i++){
+rocks.push({x:Math.random()*2000,y:Math.random()*2000});
+}
+
+// agua
+let water=[], deepWater=[];
+for(let i=0;i<3;i++){
+let x=Math.random()*1500;
+let y=Math.random()*1500;
+water.push({x,y,w:300,h:300});
+deepWater.push({x:x+50,y:y+50,w:200,h:200});
+}
+
 // enemigos
 let enemies=[];
-function spawnEnemy(x,y){
-enemies.push({
-x,y,hp:50,maxHp:50,
-type:"normal"
-});
+for(let i=0;i<25;i++){
+enemies.push({x:Math.random()*2000,y:Math.random()*2000,hp:50});
 }
 
-// spawn general
-for(let i=0;i<20;i++){
-spawnEnemy(Math.random()*2000,Math.random()*2000);
-}
-
-// proyectiles
-let bullets=[];
-
-// boss
-let boss=null;
+// npc
+let npcs=[
+{x:1000,y:950},
+{x:420,y:420}
+];
 
 // controles
-let keys={}, attack=false, skillQ=false, skillE=false;
-
 document.addEventListener("keydown",e=>{
 keys[e.key]=true;
-if(e.key===" ") attack=true;
-if(e.key==="q") skillQ=true;
-if(e.key==="e") skillE=true;
+if(e.key===" ") {attack=true; attackAnim=10;}
+if(e.key==="m"){
+mapCanvas.style.display =
+mapCanvas.style.display==="none"?"block":"none";
+}
 });
 
 document.addEventListener("keyup",e=>keys[e.key]=false);
 
-// movimiento
-function move(){
-if(keys["w"]) player.y-=4;
-if(keys["s"]) player.y+=4;
-if(keys["a"]) player.x-=4;
-if(keys["d"]) player.x+=4;
+// colisión simple
+function collide(x,y,obj,size){
+return x<obj.x+size && x+20>obj.x && y<obj.y+size && y+20>obj.y;
+}
+
+// update
+function update(){
+
+let nx=player.x, ny=player.y;
+
+if(keys["w"]) ny-=4;
+if(keys["s"]) ny+=4;
+if(keys["a"]) nx-=4;
+if(keys["d"]) nx+=4;
+
+let blocked=false;
+
+// colisiones
+trees.forEach(t=>{ if(collide(nx,ny,t,30)) blocked=true; });
+rocks.forEach(r=>{ if(collide(nx,ny,r,25)) blocked=true; });
+
+// agua profunda
+deepWater.forEach(w=>{
+if(nx>w.x && nx<w.x+w.w && ny>w.y && ny<w.y+w.h) blocked=true;
+});
+
+if(!blocked){
+player.x=nx;
+player.y=ny;
 }
 
 // enemigos IA
-function updateEnemies(){
 enemies.forEach(e=>{
 let dx=player.x-e.x;
 let dy=player.y-e.y;
@@ -121,101 +159,35 @@ e.y+=dy/dist;
 
 // daño
 if(dist<25){
-if(!inSafeZone()){
-player.hp-=0.2;
-}
+player.hp-=0.1;
 }
 });
-}
-
-// safe
-function inSafeZone(){
-return safeZones.some(z=>{
-let dx=player.x-z.x;
-let dy=player.y-z.y;
-return Math.sqrt(dx*dx+dy*dy)<z.r;
-});
-}
 
 // combate
-function combat(){
-
-// básico
 if(attack){
 enemies.forEach(e=>{
-if(dist(player,e)<60){
+if(Math.hypot(e.x-player.x,e.y-player.y)<60){
 e.hp-=10;
 }
 });
+attack=false;
 }
 
-// habilidad
-if(skillQ){
-if(getClass()==="mago"){
-bullets.push({
-x:player.x,y:player.y,
-vx:5,vy:0, dmg:15
-});
-}
-if(getClass()==="paladin"){
-player.hp=Math.min(player.hp+10,player.maxHp);
-}
+enemies=enemies.filter(e=>e.hp>0);
+
+if(attackAnim>0) attackAnim--;
 }
 
-// secundaria
-if(skillE){
-enemies.forEach(e=>{
-if(dist(player,e)<120){
-e.hp-=8;
-}
-});
-}
-
-// daño enemigos
-enemies=enemies.filter(e=>{
-if(e.hp<=0){
-player.kills++;
-if(Math.random()<0.5) player.inventory.push("💎");
-return false;
-}
-return true;
-});
-
-// boss
-if(player.kills>0 && player.kills%50===0 && !boss){
-boss={x:1500,y:1500,hp:300,maxHp:300};
-}
-}
-
-// proyectiles
-function updateBullets(){
-bullets.forEach(b=>{
-b.x+=b.vx;
-b.y+=b.vy;
-
-enemies.forEach(e=>{
-if(dist(b,e)<20){
-e.hp-=b.dmg;
-b.hit=true;
-}
-});
-});
-bullets=bullets.filter(b=>!b.hit);
-}
-
-// distancia
-function dist(a,b){
-let dx=a.x-b.x;
-let dy=a.y-b.y;
-return Math.sqrt(dx*dx+dy*dy);
-}
-
-// draw
+// draw mundo
 function draw(){
 
-ctx.clearRect(0,0,canvas.width,canvas.height);
+ctx.clearRect(0,0,600,400);
 
-// zonas seguras
+// fondo
+ctx.fillStyle="#2e8b57";
+ctx.fillRect(0,0,600,400);
+
+// zonas
 safeZones.forEach(z=>{
 ctx.fillStyle="rgba(0,255,0,0.2)";
 ctx.beginPath();
@@ -223,65 +195,122 @@ ctx.arc(z.x-player.x+300,z.y-player.y+200,z.r,0,Math.PI*2);
 ctx.fill();
 });
 
+ctx.fillStyle="rgba(255,0,0,0.2)";
+ctx.beginPath();
+ctx.arc(dangerZone.x-player.x+300,dangerZone.y-player.y+200,dangerZone.r,0,Math.PI*2);
+ctx.fill();
+
+// agua
+water.forEach(w=>{
+ctx.fillStyle="lightblue";
+ctx.fillRect(w.x-player.x+300,w.y-player.y+200,w.w,w.h);
+});
+deepWater.forEach(w=>{
+ctx.fillStyle="blue";
+ctx.fillRect(w.x-player.x+300,w.y-player.y+200,w.w,w.h);
+});
+
+// árboles
+trees.forEach(t=>{
+ctx.fillStyle="green";
+ctx.fillRect(t.x-player.x+300,t.y-player.y+200,30,30);
+});
+
+// rocas
+rocks.forEach(r=>{
+ctx.fillStyle="gray";
+ctx.fillRect(r.x-player.x+300,r.y-player.y+200,25,25);
+});
+
+// npc
+npcs.forEach(n=>{
+ctx.fillStyle="yellow";
+ctx.fillRect(n.x-player.x+300,n.y-player.y+200,20,20);
+});
+
 // enemigos
 enemies.forEach(e=>{
 ctx.fillStyle="purple";
 ctx.fillRect(e.x-player.x+300,e.y-player.y+200,20,20);
 
-// barra HP
+// HP
 ctx.fillStyle="red";
 ctx.fillRect(e.x-player.x+300,e.y-player.y+190,20,3);
 ctx.fillStyle="lime";
-ctx.fillRect(e.x-player.x+300,e.y-player.y+190,(e.hp/e.maxHp)*20,3);
+ctx.fillRect(e.x-player.x+300,e.y-player.y+190,(e.hp/50)*20,3);
 });
-
-// boss
-if(boss){
-ctx.fillStyle="black";
-ctx.fillRect(boss.x-player.x+300,boss.y-player.y+200,40,40);
-
-// HP boss
-ctx.fillStyle="red";
-ctx.fillRect(200,10,200,10);
-ctx.fillStyle="lime";
-ctx.fillRect(200,10,(boss.hp/boss.maxHp)*200,10);
-}
 
 // jugador
 ctx.fillStyle="cyan";
 ctx.fillRect(300,200,20,20);
 
-// proyectiles
-ctx.fillStyle="yellow";
-bullets.forEach(b=>{
-ctx.fillRect(b.x-player.x+300,b.y-player.y+200,5,5);
+// cabeza
+ctx.fillStyle="#ffcc99";
+ctx.fillRect(305,190,10,10);
+
+// ataque animación
+if(attackAnim>0){
+ctx.strokeStyle="yellow";
+ctx.beginPath();
+ctx.arc(310,210,attackAnim*2,0,Math.PI*2);
+ctx.stroke();
+}
+
+// vida
+ctx.fillStyle="red";
+ctx.fillRect(20,20,200,10);
+ctx.fillStyle="lime";
+ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
+
+document.getElementById("info").innerText =
+"HP:"+Math.floor(player.hp);
+}
+
+// mapa
+function drawMap(){
+mapCtx.clearRect(0,0,300,300);
+
+mapCtx.fillStyle="black";
+mapCtx.fillRect(0,0,300,300);
+
+// jugador
+mapCtx.fillStyle="cyan";
+mapCtx.fillRect(player.x/2000*300,player.y/2000*300,5,5);
+
+// zonas
+safeZones.forEach(z=>{
+mapCtx.fillStyle="green";
+mapCtx.fillRect(z.x/2000*300,z.y/2000*300,5,5);
 });
 
-// UI
-document.getElementById("info").innerText =
-"HP:"+player.hp+" | Kills:"+player.kills+" | Clase:"+getClass();
+mapCtx.fillStyle="red";
+mapCtx.fillRect(dangerZone.x/2000*300,dangerZone.y/2000*300,5,5);
 }
 
 // inventario
 function drawInventory(){
 let inv=document.getElementById("inventory");
 inv.innerHTML="";
-player.inventory.forEach((i)=>{
+player.inventory.forEach((it,i)=>{
 let d=document.createElement("div");
 d.className="slot";
-d.innerText=i;
+d.innerText=it;
+d.onclick=()=>{
+if(it==="🧪"){
+player.hp=Math.min(player.hp+20,player.maxHp);
+player.inventory.splice(i,1);
+}
+};
 inv.appendChild(d);
 });
 }
 
 // loop
 function loop(){
-move();
-updateEnemies();
-combat();
-updateBullets();
+update();
 draw();
 drawInventory();
+drawMap();
 requestAnimationFrame(loop);
 }
 
