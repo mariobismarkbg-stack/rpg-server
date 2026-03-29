@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RPG WORLD</title>
+<title>RPG WORLD FINAL</title>
 
 <style>
 body { background:black; color:white; text-align:center; }
@@ -18,17 +18,17 @@ display:grid; grid-template-columns:repeat(8,50px); gap:5px;
 
 .slot {
 width:50px;height:50px;background:#222;border:1px solid #555;
-display:flex;align-items:center;justify-content:center;flex-direction:column;
-font-size:12px;cursor:pointer;
+display:flex;flex-direction:column;align-items:center;justify-content:center;
+cursor:pointer;
 }
 </style>
 </head>
 
 <body>
 
-<h2>🌍 RPG WORLD</h2>
+<h2>🌍 RPG WORLD FINAL</h2>
 
-<canvas id="game" width="700" height="450"></canvas>
+<canvas id="game" width="800" height="500"></canvas>
 <canvas id="minimap" width="150" height="150"></canvas>
 <canvas id="worldmap" width="400" height="400"></canvas>
 
@@ -46,7 +46,13 @@ const worldmap=document.getElementById("worldmap");
 const wtx=worldmap.getContext("2d");
 
 // jugador
-let player={x:2000,y:2000,hp:100,mana:100,karma:0,inv:{}};
+let player={
+x:2000,y:2000,
+hp:100,mana:100,
+karma:0,
+inventory:{},
+anim:0
+};
 
 // clases
 function getClass(){
@@ -55,53 +61,50 @@ if(player.karma<-20) return "oscuro";
 return "neutral";
 }
 
-// ciudades y pueblos
+// ciudades grandes
 let cities=[
-{x:800,y:800,r:250,type:"city"},
-{x:3000,y:700,r:250,type:"city"},
-{x:1000,y:3000,r:120,type:"town"},
-{x:3200,y:2800,r:120,type:"town"}
+{x:800,y:800,r:400},
+{x:3000,y:700,r:400}
+];
+
+// pueblos
+let towns=[
+{x:1000,y:3000,r:200},
+{x:3200,y:2800,r:200}
 ];
 
 // zonas peligrosas
 let dangerZones=[
-{x:2000,y:2000,r:500},
-{x:3500,y:1500,r:400}
+{x:2000,y:2000,r:600},
+{x:3500,y:1500,r:500}
 ];
 
-// caminos
-let roads=[
-{x1:800,y1:800,x2:3000,y2:700},
-{x1:800,y1:800,x2:1000,y2:3000}
-];
-
-// bosques
+// bosques (GRUPOS)
 let trees=[];
-for(let i=0;i<200;i++){
+for(let i=0;i<30;i++){
 let cx=Math.random()*W, cy=Math.random()*H;
-for(let j=0;j<5;j++){
-trees.push({x:cx+Math.random()*80,y:cy+Math.random()*80,hp:30});
+for(let j=0;j<20;j++){
+trees.push({x:cx+Math.random()*200,y:cy+Math.random()*200,hp:30});
 }
 }
 
-// montañas
+// montañas grandes
 let mountains=[];
-for(let i=0;i<40;i++){
+for(let i=0;i<20;i++){
 mountains.push({x:Math.random()*W,y:Math.random()*H});
 }
 
 // lagos
 let lakes=[
-{x:3000,y:0,w:800,h:800}, // grande
+{x:2800,y:0,w:1000,h:1000},
 {x:500,y:2000,w:200,h:200},
 {x:2000,y:3500,w:200,h:200}
 ];
 
-// npc
+// NPC
 let npcs=[];
 cities.forEach(c=>{
-let count=c.type==="city"?15:5;
-for(let i=0;i<count;i++){
+for(let i=0;i<20;i++){
 npcs.push({
 x:c.x+(Math.random()-0.5)*c.r,
 y:c.y+(Math.random()-0.5)*c.r,
@@ -112,13 +115,17 @@ home:c
 
 // enemigos
 let enemies=[];
-function spawnEnemy(x,y,type){
-enemies.push({x,y,hp:type==="boss"?200:type==="elite"?100:50,type});
+function spawn(type,x,y){
+enemies.push({
+x,y,
+hp:type==="boss"?200:type==="elite"?100:50,
+type
+});
 }
 
-// spawn inicial
-for(let i=0;i<80;i++){
-spawnEnemy(Math.random()*W,Math.random()*H,"normal");
+// spawn masivo
+for(let i=0;i<120;i++){
+spawn("normal",Math.random()*W,Math.random()*H);
 }
 
 // controles
@@ -127,7 +134,8 @@ document.addEventListener("keydown",e=>{
 keys[e.key]=true;
 if(e.key===" ") attack=true;
 if(e.key==="m"){
-worldmap.style.display=worldmap.style.display==="none"?"block":"none";
+worldmap.style.display=
+worldmap.style.display==="none"?"block":"none";
 }
 });
 document.addEventListener("keyup",e=>keys[e.key]=false);
@@ -135,56 +143,61 @@ document.addEventListener("keyup",e=>keys[e.key]=false);
 // update
 function update(){
 
-// movimiento
 let nx=player.x, ny=player.y;
+
+// movimiento
 if(keys["w"]) ny-=4;
 if(keys["s"]) ny+=4;
 if(keys["a"]) nx-=4;
 if(keys["d"]) nx+=4;
 
-// colisiones montañas
+// colisión montañas
 let blocked=false;
 mountains.forEach(m=>{
-if(Math.hypot(nx-m.x,ny-m.y)<60) blocked=true;
+if(Math.hypot(nx-m.x,ny-m.y)<80) blocked=true;
 });
 
-// agua profunda
-lakes.forEach(l=>{
-if(nx>l.x && nx<l.x+l.w && ny>l.y && ny<l.y+l.h){
-if(l.w>500) blocked=true; // lago grande bloquea
+if(!blocked){
+player.x=nx;player.y=ny;
 }
-});
 
-if(!blocked){player.x=nx;player.y=ny;}
+// animación caminar
+if(keys["w"]||keys["s"]||keys["a"]||keys["d"]){
+player.anim+=0.3;
+}
 
-// npc movimiento
+// NPC movimiento dentro ciudad
 npcs.forEach(n=>{
-n.x+=Math.random()-0.5;
-n.y+=Math.random()-0.5;
+let dx=n.home.x-n.x;
+let dy=n.home.y-n.y;
+
+n.x+=Math.sign(dx)*0.3 + (Math.random()-0.5);
+n.y+=Math.sign(dy)*0.3 + (Math.random()-0.5);
 });
 
-// enemigos IA
+// enemigos
 enemies.forEach(e=>{
+
+// no entrar ciudades
+let inCity=cities.some(c=>Math.hypot(e.x-c.x,e.y-c.y)<c.r);
+if(inCity) return;
+
 let dx=player.x-e.x;
 let dy=player.y-e.y;
 let dist=Math.hypot(dx,dy);
 
-// no entrar ciudad
-let inCity=cities.some(c=>Math.hypot(e.x-c.x,e.y-c.y)<c.r);
-if(inCity) return;
-
-if(dist<200){
+if(dist<250){
 e.x+=dx/dist;
 e.y+=dy/dist;
 }
 
-if(dist<30) player.hp-=0.1;
+if(dist<30) player.hp-=0.2;
 });
 
-// combate
+// ataque
 if(attack){
 enemies.forEach(e=>{
-if(Math.hypot(e.x-player.x,e.y-player.y)<60){
+if(Math.hypot(e.x-player.x,e.y-player.y)<70){
 e.hp-=10;
 }
 });
@@ -193,79 +206,115 @@ attack=false;
 
 // eliminar muertos
 enemies=enemies.filter(e=>e.hp>0);
+}
 
+// draw personaje
+function drawPlayer(x,y){
+
+let offset=Math.sin(player.anim)*5;
+
+// cuerpo
+ctx.fillStyle="cyan";
+ctx.fillRect(x,y+offset,20,20);
+
+// cabeza
+ctx.fillStyle="#ffcc99";
+ctx.fillRect(x+5,y-10+offset,10,10);
+
+// piernas
+ctx.fillStyle="white";
+ctx.fillRect(x+2,y+20+Math.sin(player.anim)*5,5,10);
+ctx.fillRect(x+12,y+20-Math.sin(player.anim)*5,5,10);
+}
+
+// draw npc
+function drawNPC(n,x,y){
+let offset=Math.sin(n.x)*2;
+
+ctx.fillStyle="yellow";
+ctx.fillRect(x,y+offset,15,15);
+
+ctx.fillStyle="#ffcc99";
+ctx.fillRect(x+3,y-8+offset,8,8);
+
+ctx.fillStyle="white";
+ctx.fillRect(x+2,y+15+Math.sin(offset)*3,4,8);
+ctx.fillRect(x+9,y+15-Math.sin(offset)*3,4,8);
 }
 
 // draw
 function draw(){
 
-ctx.clearRect(0,0,700,450);
+ctx.clearRect(0,0,800,500);
 
 // fondo
 ctx.fillStyle="#2e8b57";
-ctx.fillRect(0,0,700,450);
-
-// caminos
-ctx.strokeStyle="#c2b280";
-roads.forEach(r=>{
-ctx.beginPath();
-ctx.moveTo(r.x1-player.x+350,r.y1-player.y+225);
-ctx.lineTo(r.x2-player.x+350,r.y2-player.y+225);
-ctx.stroke();
-});
+ctx.fillRect(0,0,800,500);
 
 // lagos
 lakes.forEach(l=>{
 ctx.fillStyle=l.w>500?"darkblue":"lightblue";
-ctx.fillRect(l.x-player.x+350,l.y-player.y+225,l.w,l.h);
+ctx.fillRect(l.x-player.x+400,l.y-player.y+250,l.w,l.h);
 });
 
 // montañas
 mountains.forEach(m=>{
 ctx.fillStyle="white";
 ctx.beginPath();
-ctx.arc(m.x-player.x+350,m.y-player.y+225,50,0,Math.PI*2);
+ctx.arc(m.x-player.x+400,m.y-player.y+250,60,0,Math.PI*2);
 ctx.fill();
 });
 
-// árboles
+// bosques
 trees.forEach(t=>{
 ctx.fillStyle="green";
-ctx.fillRect(t.x-player.x+350,t.y-player.y+225,20,20);
+ctx.fillRect(t.x-player.x+400,t.y-player.y+250,15,15);
 });
 
 // ciudades
 cities.forEach(c=>{
 ctx.strokeStyle="white";
-ctx.strokeRect(c.x-player.x+350-c.r/2,c.y-player.y+225-c.r/2,c.r,c.r);
+ctx.lineWidth=3;
+ctx.strokeRect(c.x-player.x+400-c.r/2,c.y-player.y+250-c.r/2,c.r,c.r);
 });
 
 // npc
 npcs.forEach(n=>{
-ctx.fillStyle="yellow";
-ctx.fillRect(n.x-player.x+350,n.y-player.y+225,10,10);
+drawNPC(n,n.x-player.x+400,n.y-player.y+250);
 });
 
 // enemigos
 enemies.forEach(e=>{
 ctx.fillStyle=e.type==="elite"?"red":e.type==="boss"?"black":"purple";
-ctx.fillRect(e.x-player.x+350,e.y-player.y+225,20,20);
+ctx.fillRect(e.x-player.x+400,e.y-player.y+250,20,20);
 });
 
 // jugador
-ctx.fillStyle="cyan";
-ctx.fillRect(350,225,20,20);
+drawPlayer(400,250);
 
 // minimapa
 mtx.clearRect(0,0,150,150);
+
+// jugador centro
 mtx.fillStyle="blue";
 mtx.fillRect(75,75,4,4);
+
+// npc
+mtx.fillStyle="green";
+npcs.forEach(n=>{
+mtx.fillRect((n.x-player.x)/20+75,(n.y-player.y)/20+75,2,2);
+});
+
+// enemigos
+mtx.fillStyle="red";
+enemies.forEach(e=>{
+mtx.fillRect((e.x-player.x)/20+75,(e.y-player.y)/20+75,2,2);
+});
 
 // worldmap
 wtx.clearRect(0,0,400,400);
 wtx.fillStyle="blue";
 wtx.fillRect(player.x/W*400,player.y/H*400,5,5);
-
 }
 
 // loop
