@@ -346,6 +346,38 @@ ctx.fillStyle="lime";
 ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
 }
 
+// INVENTARIO
+function drawInv(){
+inventory.innerHTML="";
+for(let k in player.inv){
+let d=document.createElement("div");
+d.className="slot";
+d.innerHTML=k+" x"+player.inv[k];
+inventory.appendChild(d);
+}
+}
+
+// MINIMAPA
+function drawMini(){
+mini.fillStyle="black";
+mini.fillRect(0,0,150,150);
+
+// jugador
+mini.fillStyle="blue";
+mini.fillRect(75,75,3,3);
+
+// enemigos
+enemies.forEach(e=>{
+mini.fillStyle="red";
+mini.fillRect((e.x/MAP)*150,(e.y/MAP)*150,2,2);
+});
+
+// ciudades
+cities.forEach(c=>{
+mini.fillStyle="cyan";
+mini.fillRect((c.x/MAP)*150,(c.y/MAP)*150,3,3);
+});
+}
 // LOOP
 function loop(){
 update();
