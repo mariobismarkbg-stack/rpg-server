@@ -2,100 +2,131 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RPG PRO</title>
+<title>RPG PRO AVANZADO</title>
 
 <style>
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:10px; }
 
+/* INVENTARIO */
 #inventory {
-position:fixed; bottom:10px; left:50%;
+position:fixed;
+bottom:10px;
+left:50%;
 transform:translateX(-50%);
-display:grid; grid-template-columns:repeat(8,50px);
+display:grid;
+grid-template-columns:repeat(8,50px);
 gap:5px;
 }
 
 .slot {
-width:50px;height:50px;background:#222;
+width:50px;height:50px;
+background:#222;
 border:1px solid #555;
-display:flex;flex-direction:column;
-align-items:center;justify-content:center;
-font-size:12px;cursor:pointer;
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+font-size:12px;
 }
 
-#minimap { position:fixed; top:10px; right:10px; border:2px solid white; }
+/* MINIMAPA */
+#minimap {
+position:fixed;
+top:10px;
+right:10px;
+border:2px solid white;
+}
+
+/* MENU PERSONAJE */
+#menu {
+position:fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+background:#111;
+padding:20px;
+display:none;
+border:2px solid white;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🌍 RPG PRO</h2>
+<h2>🌍 RPG PRO AVANZADO</h2>
 
-<canvas id="game" width="800" height="500"></canvas>
+<canvas id="game" width="900" height="500"></canvas>
 <canvas id="minimap" width="150" height="150"></canvas>
 
 <div id="inventory"></div>
 
+<div id="menu"></div>
+
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const mini = document.getElementById("minimap").getContext("2d");
 
-const MAP = 4000;
+const MAP = 5000;
 
-// jugador
+// PLAYER
 let player = {
-x:2000,y:2000,
+x:2500,y:2500,
 hp:100,maxHp:100,
+mana:50,maxMana:50,
+karma:0,
+class:"neutral",
 inv:{},
 anim:0
 };
 
-// árboles (bloquean)
-let trees=[];
-for(let i=0;i<200;i++){
-trees.push({x:Math.random()*MAP,y:Math.random()*MAP,hp:30});
-}
-
-// rocas (bloquean fuerte)
-let rocks=[];
-for(let i=0;i<100;i++){
-rocks.push({x:Math.random()*MAP,y:Math.random()*MAP});
-}
-
-// lago grande + pequeños
-let lakes=[
-{x:3000,y:0,w:800,h:800},
-{x:500,y:2000,w:200,h:200}
-];
-
-// ciudad
-let cities=[
-{x:800,y:800,r:300}
-];
-
-// enemigos
-let enemies=[];
-for(let i=0;i<50;i++){
-enemies.push({x:Math.random()*MAP,y:Math.random()*MAP,hp:50});
-}
-
-// controles
-let keys={},attack=false;
+// INPUT
+let keys={},attack=false,showMap=false,showMenu=false;
 
 document.addEventListener("keydown",e=>{
 keys[e.key]=true;
 if(e.key===" ") attack=true;
+if(e.key==="m") showMap=!showMap;
+if(e.key==="p") showMenu=!showMenu;
 });
-
 document.addEventListener("keyup",e=>keys[e.key]=false);
 
-// colisión
+// OBJETOS
+let trees=[...Array(300)].map(()=>({x:Math.random()*MAP,y:Math.random()*MAP}));
+let rocks=[...Array(150)].map(()=>({x:Math.random()*MAP,y:Math.random()*MAP}));
+
+let lakes=[
+{x:3000,y:3000,w:800,h:800},
+{x:1000,y:2000,w:200,h:200},
+{x:3500,y:1000,w:300,h:200}
+];
+
+let cities=[
+{x:800,y:800,r:300},
+{x:4000,y:4000,r:400}
+];
+
+// NPC
+let npcs=[...Array(20)].map(()=>({
+x:800+Math.random()*200,
+y:800+Math.random()*200
+}));
+
+// ENEMIGOS
+let enemies=[...Array(80)].map(()=>({
+x:Math.random()*MAP,
+y:Math.random()*MAP,
+hp:50
+}));
+
+// COLISION
 function collide(x,y){
 for(let t of trees){
-if(Math.hypot(x-t.x,y-t.y)<20) return true;
+if(Math.hypot(x-t.x,y-t.y)<15) return true;
 }
 for(let r of rocks){
-if(Math.hypot(x-r.x,y-r.y)<40) return true;
+if(Math.hypot(x-r.x,y-r.y)<30) return true;
 }
 for(let l of lakes){
 if(x>l.x && x<l.x+l.w && y>l.y && y<l.y+l.h) return true;
@@ -103,12 +134,11 @@ if(x>l.x && x<l.x+l.w && y>l.y && y<l.y+l.h) return true;
 return false;
 }
 
-// update
+// UPDATE
 function update(){
 
 let nx=player.x,ny=player.y;
 
-// movimiento (FIX REAL)
 if(keys["w"]) ny-=4;
 if(keys["s"]) ny+=4;
 if(keys["a"]) nx-=4;
@@ -120,7 +150,17 @@ player.y=ny;
 player.anim+=0.3;
 }
 
-// enemigos persiguen
+// CLASE POR KARMA
+if(player.karma>20) player.class="paladin";
+else if(player.karma<-20) player.class="oscuro";
+else player.class="neutral";
+
+// NPC movimiento
+npcs.forEach(n=>{
+n.x+=Math.sin(Date.now()/1000)*0.2;
+});
+
+// ENEMIGOS
 enemies.forEach(e=>{
 let dx=player.x-e.x;
 let dy=player.y-e.y;
@@ -131,13 +171,12 @@ e.x+=dx/d;
 e.y+=dy/d;
 }
 
-// daño
 if(d<25){
 player.hp-=0.1;
 }
 });
 
-// ataque
+// ATAQUE
 if(attack){
 enemies.forEach(e=>{
 if(Math.hypot(e.x-player.x,e.y-player.y)<60){
@@ -147,7 +186,7 @@ e.hp-=10;
 attack=false;
 }
 
-// drops
+// MUERTE ENEMIGO
 enemies=enemies.filter(e=>{
 if(e.hp<=0){
 player.inv["💎"]=(player.inv["💎"]||0)+1;
@@ -157,109 +196,136 @@ return true;
 });
 }
 
-// dibujar personaje (con piernas)
-function drawPlayer(x,y,color){
-
-let offset=Math.sin(player.anim)*4;
+// DIBUJAR PERSONAJE
+function drawChar(x,y,color){
+let off=Math.sin(player.anim)*4;
 
 ctx.fillStyle=color;
+ctx.fillRect(x,y+off,20,20);
 
-// cuerpo
-ctx.fillRect(x,y+offset,20,20);
-
-// cabeza
 ctx.fillStyle="#ffcc99";
-ctx.fillRect(x+5,y-10+offset,10,10);
+ctx.fillRect(x+5,y-10+off,10,10);
 
 // piernas
 ctx.fillStyle="white";
-ctx.fillRect(x+3,y+20+Math.sin(player.anim)*4,4,8);
-ctx.fillRect(x+13,y+20-Math.sin(player.anim)*4,4,8);
+ctx.fillRect(x+2,y+20+Math.sin(player.anim)*4,4,8);
+ctx.fillRect(x+14,y+20-Math.sin(player.anim)*4,4,8);
 }
 
-// draw
+// DRAW
 function draw(){
 
-ctx.clearRect(0,0,800,500);
+ctx.clearRect(0,0,900,500);
 
-// fondo
+// FONDO
 ctx.fillStyle="#2e8b57";
-ctx.fillRect(0,0,800,500);
+ctx.fillRect(0,0,900,500);
 
-// ciudad
+// CIUDADES
 cities.forEach(c=>{
 ctx.fillStyle="rgba(0,255,255,0.3)";
 ctx.beginPath();
-ctx.arc(c.x-player.x+400,c.y-player.y+250,c.r,0,Math.PI*2);
+ctx.arc(c.x-player.x+450,c.y-player.y+250,c.r,0,Math.PI*2);
 ctx.fill();
-
-// muralla
-ctx.strokeStyle="#555";
-ctx.strokeRect(
-c.x-player.x+400-c.r/2,
-c.y-player.y+250-c.r/2,
-c.r,c.r
-);
 });
 
-// lagos
+// LAGOS
 lakes.forEach(l=>{
 ctx.fillStyle="blue";
-ctx.fillRect(l.x-player.x+400,l.y-player.y+250,l.w,l.h);
+ctx.fillRect(l.x-player.x+450,l.y-player.y+250,l.w,l.h);
 });
 
-// rocas
+// ROCAS
 rocks.forEach(r=>{
 ctx.fillStyle="gray";
 ctx.beginPath();
-ctx.arc(r.x-player.x+400,r.y-player.y+250,30,0,Math.PI*2);
+ctx.arc(r.x-player.x+450,r.y-player.y+250,20,0,Math.PI*2);
 ctx.fill();
 });
 
-// árboles
+// ARBOLES
 trees.forEach(t=>{
 ctx.fillStyle="green";
-ctx.fillRect(t.x-player.x+400,t.y-player.y+250,15,15);
+ctx.fillRect(t.x-player.x+450,t.y-player.y+250,10,10);
 });
 
-// enemigos
+// NPC
+npcs.forEach(n=>{
+drawChar(n.x-player.x+450,n.y-player.y+250,"yellow");
+});
+
+// ENEMIGOS
 enemies.forEach(e=>{
-drawPlayer(e.x-player.x+400,e.y-player.y+250,"purple");
+drawChar(e.x-player.x+450,e.y-player.y+250,"purple");
 
-// barra HP
+// HP
 ctx.fillStyle="red";
-ctx.fillRect(e.x-player.x+400,e.y-player.y+240,20,3);
-
+ctx.fillRect(e.x-player.x+450,e.y-player.y+240,20,3);
 ctx.fillStyle="lime";
-ctx.fillRect(e.x-player.x+400,e.y-player.y+240,(e.hp/50)*20,3);
+ctx.fillRect(e.x-player.x+450,e.y-player.y+240,(e.hp/50)*20,3);
 });
 
-// jugador
-drawPlayer(400,250,"cyan");
+// PLAYER
+let color="cyan";
+if(player.class==="paladin") color="gold";
+if(player.class==="oscuro") color="purple";
 
-// HP jugador
+drawChar(450,250,color);
+
+// HP PLAYER
 ctx.fillStyle="red";
 ctx.fillRect(20,20,200,10);
 ctx.fillStyle="lime";
 ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
+
+// MANA
+ctx.fillStyle="blue";
+ctx.fillRect(20,40,(player.mana/player.maxMana)*200,10);
 }
 
-// inventario
-function drawInventory(){
+// INVENTARIO
+function drawInv(){
 inventory.innerHTML="";
-for(let it in player.inv){
+for(let k in player.inv){
 let d=document.createElement("div");
 d.className="slot";
-d.innerHTML=it+" x"+player.inv[it];
+d.innerHTML=k+" x"+player.inv[k];
 inventory.appendChild(d);
 }
 }
 
-// loop
+// MINIMAPA
+function drawMini(){
+mini.fillStyle="black";
+mini.fillRect(0,0,150,150);
+
+mini.fillStyle="blue";
+mini.fillRect(75,75,3,3);
+
+enemies.forEach(e=>{
+mini.fillStyle="red";
+mini.fillRect((e.x/MAP)*150,(e.y/MAP)*150,2,2);
+});
+}
+
+// MENU
+function drawMenu(){
+menu.style.display=showMenu?"block":"none";
+menu.innerHTML=`
+Clase: ${player.class}<br>
+HP: ${player.hp}<br>
+Mana: ${player.mana}<br>
+Karma: ${player.karma}
+`;
+}
+
+// LOOP
 function loop(){
 update();
 draw();
-drawInventory();
+drawInv();
+drawMini();
+drawMenu();
 requestAnimationFrame(loop);
 }
 
