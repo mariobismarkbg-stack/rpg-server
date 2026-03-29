@@ -25,6 +25,12 @@ canvas { display: block; }
 
 #classTag { position: fixed; top: 150px; left: 12px; font-family: 'Cinzel', serif; font-size: 14px; z-index: 10; padding: 8px 12px; border-radius: 4px; border: 2px solid #555; background: rgba(10,10,20,0.9); text-align: center; min-width: 120px; }
 
+#skillBar { position: fixed; top: 200px; left: 12px; z-index: 10; font-size: 12px; color: #aaa; }
+.skill-slot { width: 50px; height: 50px; background: #1a1a2e; border: 2px solid #555; border-radius: 4px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; position: relative; transition: all 0.2s; }
+.skill-slot:hover { background: #2a2a3e; border-color: #c9a84c; }
+.skill-slot.active { border-color: #4f4; background: #1a2a1a; }
+.skill-cooldown { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); border-radius: 2px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: bold; }
+
 #gameTitle { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); font-family: 'Cinzel', serif; font-weight: 900; font-size: 20px; color: #c9a84c; letter-spacing: 3px; z-index: 10; text-shadow: 0 0 12px rgba(201,168,76,0.6); padding: 10px 25px; }
 
 #deathScreen { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 100; font-family: 'Cinzel', serif; }
@@ -71,6 +77,20 @@ canvas { display: block; }
   </div>
   <div id="classTag">
    ⚔️ Aldeano
+  </div>
+  <div id="skillBar">
+   <div class="skill-slot" id="skill-fireball" data-skill="fireball" title="Bola de Fuego (Q)">
+    🔥 
+    <div class="skill-cooldown" style="display: none;"></div>
+   </div>
+   <div class="skill-slot" id="skill-heal" data-skill="heal" title="Curar (W)">
+    💚 
+    <div class="skill-cooldown" style="display: none;"></div>
+   </div>
+   <div class="skill-slot" id="skill-chop" data-skill="chop" title="Talar (E)">
+    🪓 
+    <div class="skill-cooldown" style="display: none;"></div>
+   </div>
   </div>
   <div id="levelUp" style="display: none;">
    ✨ ¡SUBES DE NIVEL!<br><span id="levelUpText"></span>
@@ -152,7 +172,11 @@ const defaultConfig = {
   accent_color: "#c9a84c",
   secondary_color: "#555555",
   font_family: "Almendra",
-  font_size: 14
+  font_size: 14,
+  tree_harvest_xp: "10",
+  skill_cooldown: "1000",
+  day_duration: "120",
+  karma_multiplier: "1"
 };
 
 let currentConfig = { ...defaultConfig };
@@ -190,7 +214,11 @@ window.elementSdk.init({
     fontSizeable: undefined
   }),
   mapToEditPanelValues: (cfg) => new Map([
-    ["game_title", cfg.game_title || defaultConfig.game_title]
+    ["game_title", cfg.game_title || defaultConfig.game_title],
+    ["tree_harvest_xp", cfg.tree_harvest_xp || defaultConfig.tree_harvest_xp],
+    ["skill_cooldown", cfg.skill_cooldown || defaultConfig.skill_cooldown],
+    ["day_duration", cfg.day_duration || defaultConfig.day_duration],
+    ["karma_multiplier", cfg.karma_multiplier || defaultConfig.karma_multiplier]
   ])
 });
 
@@ -251,8 +279,18 @@ document.addEventListener("keydown", e => {
   if (e.key.toLowerCase() === "m") { e.preventDefault(); openFullMap(); }
   if (e.key.toLowerCase() === "p") { e.preventDefault(); openCharacter(); }
   if (e.key.toLowerCase() === "i") { e.preventDefault(); openInventory(); }
+  if (e.key.toLowerCase() === "q") { e.preventDefault(); castSkill('fireball'); }
+  if (e.key.toLowerCase() === "w") { e.preventDefault(); castSkill('heal'); }
+  if (e.key.toLowerCase() === "e") { e.preventDefault(); castSkill('chop'); }
 });
 document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+let mouseX = canvas.width / 2, mouseY = canvas.height / 2;
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+});
 
 let projectiles = [];
 let particles = [];
@@ -270,20 +308,48 @@ const cities = [
   {x: 4200, y: 4200, r: 450, name: "Ciudad Oscura", type: "Capital", isCapital: true},
   {x: 700, y: 3500, r: 250, name: "Santuario", type: "Zona Sagrada", isCapital: false},
   {x: 4500, y: 800, r: 300, name: "Fortaleza", type: "Fuerte Militar", isCapital: false},
-  {x: 2000, y: 2200, r: 200, name: "Templo Antiguo", type: "Ruinas", isCapital: false}
+  {x: 2000, y: 2200, r: 200, name: "Templo Antiguo", type: "Ruinas", isCapital: false},
+  {x: 1200, y: 350, r: 280, name: "Torre del Mago", type: "Academia Arcana", isCapital: false},
+  {x: 4800, y: 2400, r: 240, name: "Minas Profundas", type: "Pueblo Subterráneo", isCapital: false},
+  {x: 600, y: 600, r: 150, name: "Granja Real", type: "Aldea Agrícola", isCapital: false},
+  {x: 3200, y: 1200, r: 180, name: "Mercado Central", type: "Hub Comercial", isCapital: false},
+  {x: 1500, y: 4500, r: 220, name: "Oasis Sagrado", type: "Templo del Agua", isCapital: false},
+  {x: 4000, y: 3000, r: 260, name: "Foresta Dorada", type: "Pueblo Elfo", isCapital: false}
 ];
 
 const dangerZones = [
-  {x: 3500, y: 3500, r: 400, name: "Montañas Oscuras", danger: "extreme", color: "#2a1a1a"},
-  {x: 1200, y: 1500, r: 350, name: "Bosque Encantado", danger: "high", color: "#1a2a1a"},
-  {x: 3800, y: 2300, r: 280, name: "Cueva del Dragón", danger: "extreme", color: "#1a1a2a"},
-  {x: 500, y: 2000, r: 250, name: "Pantano Misterioso", danger: "high", color: "#2a2a1a"}
+  {x: 3500, y: 3500, r: 400, name: "Montañas Oscuras", danger: "extreme", color: "#2a1a1a", type: "mountain"},
+  {x: 1200, y: 1500, r: 350, name: "Bosque Encantado", danger: "high", color: "#1a2a1a", type: "forest"},
+  {x: 3800, y: 2300, r: 280, name: "Cueva del Dragón", danger: "extreme", color: "#1a1a2a", type: "cave"},
+  {x: 500, y: 2000, r: 250, name: "Pantano Misterioso", danger: "high", color: "#2a2a1a", type: "swamp"},
+  {x: 250, y: 4200, r: 300, name: "Bosque Prohibido", danger: "extreme", color: "#0a1a0a", type: "forest"},
+  {x: 2800, y: 200, r: 320, name: "Picos de Hielo", danger: "extreme", color: "#3a4a5a", type: "mountain"},
+  {x: 4600, y: 4600, r: 280, name: "Valle Sombrío", danger: "high", color: "#1a0a1a", type: "cave"},
+  {x: 800, y: 4800, r: 270, name: "Tierras Desoladas", danger: "extreme", color: "#3a2a1a", type: "wasteland"}
+];
+
+// Zonas de agua profunda
+const deepWaters = [
+  {x: 2800, y: 2800, r: 200},
+  {x: 900, y: 2200, r: 120},
+  {x: 3800, y: 1200, r: 150},
+  {x: 1500, y: 4000, r: 130}
 ];
 
 const roads = [
   {x1: 800, y1: 800, x2: 2500, y2: 500},
   {x1: 800, y1: 800, x2: 4200, y2: 4200},
-  {x1: 2500, y1: 500, x2: 4200, y2: 4200}
+  {x1: 2500, y1: 500, x2: 4200, y2: 4200},
+  {x1: 800, y1: 800, x2: 700, y2: 3500},
+  {x1: 800, y1: 800, x2: 4500, y2: 800},
+  {x1: 800, y1: 800, x2: 2000, y2: 2200},
+  {x1: 2500, y1: 500, x2: 1200, y2: 350},
+  {x1: 2500, y1: 500, x2: 3200, y2: 1200},
+  {x1: 4200, y1: 4200, x2: 1500, y2: 4500},
+  {x1: 4200, y1: 4200, x2: 4000, y2: 3000},
+  {x1: 4500, y1: 800, x2: 4800, y2: 2400},
+  {x1: 2000, y1: 2200, x2: 3200, y2: 1200},
+  {x1: 700, y1: 3500, x2: 1500, y2: 4500}
 ];
 
 const buildings = [];
@@ -348,9 +414,107 @@ let enemies = Array.from({ length: 50 }, () => {
 });
 
 let killCount = 0;
+let gameTime = 0; // en segundos
+let dayLength = 120; // 2 minutos por día (120 segundos)
+let isDay = true; // true = día, false = noche
 
 let dialogBox = null;
 let dialogTimer = 0;
+
+let droppedItems = []; // items drapeados en el mundo
+
+let skills = {
+  fireball: { cooldown: 0, maxCooldown: 1500, mana: 30, range: 400 },
+  heal: { cooldown: 0, maxCooldown: 2000, mana: 50, healing: 40 },
+  chop: { cooldown: 0, maxCooldown: 800, mana: 0, range: 50 }
+};
+
+function castSkill(skillName) {
+  const skill = skills[skillName];
+  if (skill.cooldown > 0) return;
+  
+  if (skill.mana > 0 && player.mana < skill.mana) {
+    showNotification("❌ Mana insuficiente");
+    return;
+  }
+
+  if (skillName === 'fireball') {
+    player.mana -= skill.mana;
+    skill.cooldown = parseInt(currentConfig.skill_cooldown) || 1000;
+    
+    const camX = player.x - canvas.width / 2;
+    const camY = player.y - canvas.height / 2;
+    const screenX = mouseX;
+    const screenY = mouseY;
+    
+    let dx = (screenX - canvas.width / 2);
+    let dy = (screenY - canvas.height / 2);
+    let d = Math.hypot(dx, dy) || 1;
+    dx /= d; dy /= d;
+    
+    for (let i = 0; i < 3; i++) {
+      let angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.4;
+      projectiles.push({
+        x: player.x + dx * 15,
+        y: player.y + dy * 15,
+        dx: Math.cos(angle) * 6,
+        dy: Math.sin(angle) * 6,
+        life: 120,
+        type: 'fireball',
+        damage: 25
+      });
+    }
+    showNotification("🔥 Bola de Fuego!");
+  }
+  
+  else if (skillName === 'heal') {
+    player.mana -= skill.mana;
+    skill.cooldown = parseInt(currentConfig.skill_cooldown) || 1000;
+    
+    let heal = parseInt(currentConfig.tree_harvest_xp) || 10;
+    if (player.cls === 'mago') heal = skill.healing;
+    else if (player.cls === 'leyenda') heal = skill.healing * 1.5;
+    
+    player.hp = Math.min(player.hp + heal, player.maxHp);
+    spawnParticles(player.x, player.y, '#4f4', 15);
+    showNotification(`💚 +${Math.floor(heal)} HP`);
+  }
+  
+  else if (skillName === 'chop') {
+    skill.cooldown = parseInt(currentConfig.skill_cooldown) || 1000;
+    
+    for (let i = trees.length - 1; i >= 0; i--) {
+      let t = trees[i];
+      if (Math.hypot(player.x - t.x, player.y - t.y) < 80) {
+        spawnParticles(t.x, t.y, '#8b4513', 12);
+        let xpReward = parseInt(currentConfig.tree_harvest_xp) || 10;
+        gainXP(xpReward);
+        player.inv['🪵'] = (player.inv['🪵'] || 0) + 1;
+        trees.splice(i, 1);
+        showNotification(`🪵 +${xpReward} XP`);
+      }
+    }
+  }
+  
+  updateSkillButtons();
+}
+
+function updateSkillButtons() {
+  for (let skill in skills) {
+    const btn = document.getElementById(`skill-${skill}`);
+    const cd = btn.querySelector('.skill-cooldown');
+    if (skills[skill].cooldown > 0) {
+      cd.style.display = 'flex';
+      cd.textContent = Math.ceil(skills[skill].cooldown / 100) / 10 + 's';
+    } else {
+      cd.style.display = 'none';
+    }
+  }
+}
+
+document.querySelectorAll('.skill-slot').forEach(btn => {
+  btn.addEventListener('click', () => castSkill(btn.dataset.skill));
+});
 
 function inLake(x, y) {
   return lakes.some(l => x > l.x && x < l.x + l.w && y > l.y && y < l.y + l.h);
@@ -364,8 +528,19 @@ function inDangerZone(x, y) {
   return dangerZones.some(d => Math.hypot(x - d.x, y - d.y) < d.r);
 }
 
+function inDeepWater(x, y) {
+  return deepWaters.some(w => Math.hypot(x - w.x, y - w.y) < w.r);
+}
+
+function isInMountain(x, y) {
+  const mountains = dangerZones.filter(d => d.type === "mountain");
+  return mountains.some(m => Math.hypot(x - m.x, y - m.y) < m.r - 40);
+}
+
 function collide(x, y) {
   if (x < 10 || y < 10 || x > MAP - 10 || y > MAP - 10) return true;
+  if (isInMountain(x, y)) return true;
+  if (inDeepWater(x, y)) return true;
   for (let t of trees) { if (Math.hypot(x - t.x, y - t.y) < 10) return true; }
   for (let r of rocks) { if (Math.hypot(x - r.x, y - r.y) < r.size * 0.5) return true; }
   for (let b of buildings) { if (x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) return true; }
@@ -424,16 +599,39 @@ function gainXP(amount) {
 
 function spawnDangerZoneEnemies() {
   for (let zone of dangerZones) {
-    let count = zone.danger === "extreme" ? 12 : 8;
+    let count = zone.danger === "extreme" ? 16 : 10;
     for (let i = 0; i < count; i++) {
       let angle = Math.random() * Math.PI * 2;
       let dist = Math.random() * zone.r * 0.8;
       let x = zone.x + Math.cos(angle) * dist;
       let y = zone.y + Math.sin(angle) * dist;
       
-      let isDanger = Math.random() > 0.3;
-      let hp = isDanger ? 100 : 50;
-      let type = isDanger ? "demon" : "beast";
+      let typeRoll = Math.random();
+      let hp, type;
+      
+      if (zone.type === "mountain") {
+        if (typeRoll > 0.7) { hp = 120; type = "troll"; }
+        else if (typeRoll > 0.4) { hp = 80; type = "golem"; }
+        else { hp = 60; type = "wolf"; }
+      } else if (zone.type === "forest") {
+        if (typeRoll > 0.6) { hp = 100; type = "wildcat"; }
+        else if (typeRoll > 0.3) { hp = 70; type = "bear"; }
+        else { hp = 45; type = "wolf"; }
+      } else if (zone.type === "cave") {
+        if (typeRoll > 0.5) { hp = 130; type = "demon"; }
+        else if (typeRoll > 0.2) { hp = 90; type = "beast"; }
+        else { hp = 50; type = "bat"; }
+      } else if (zone.type === "swamp") {
+        if (typeRoll > 0.6) { hp = 85; type = "spiderbeast"; }
+        else if (typeRoll > 0.3) { hp = 60; type = "lizard"; }
+        else { hp = 40; type = "wolf"; }
+      } else if (zone.type === "wasteland") {
+        if (typeRoll > 0.5) { hp = 140; type = "wraith"; }
+        else if (typeRoll > 0.2) { hp = 100; type = "demon"; }
+        else { hp = 70; type = "skeleton"; }
+      } else {
+        hp = 50; type = "beast";
+      }
       
       enemies.push({
         x, y, hp, maxHp: hp, type, anim: Math.random() * 6
@@ -490,6 +688,12 @@ function update() {
 
   if (player.attackCooldown > 0) player.attackCooldown--;
 
+  for (let skill in skills) {
+    if (skills[skill].cooldown > 0) {
+      skills[skill].cooldown--;
+    }
+  }
+
   if (attackPressed && player.attackCooldown <= 0 && player.mana >= 5) {
     player.mana -= 5;
     player.attackCooldown = 12;
@@ -525,9 +729,10 @@ function update() {
     p.life--;
     enemies.forEach(e => {
       if (Math.hypot(p.x - e.x, p.y - e.y) < 20) {
-        e.hp -= 15;
+        let dmg = p.damage || 15;
+        e.hp -= dmg;
         p.hit = true;
-        spawnParticles(e.x, e.y, '#f44', 6);
+        spawnParticles(e.x, e.y, p.type === 'fireball' ? '#f84' : '#f44', 8);
       }
     });
   });
@@ -546,6 +751,14 @@ function update() {
     else if (e.type === "bear") { chaseRange = 180; spd = 1.2; dmg = 0.4; }
     else if (e.type === "demon") { chaseRange = 350; spd = 2.8; dmg = 0.6; }
     else if (e.type === "beast") { chaseRange = 300; spd = 2.5; dmg = 0.5; }
+    else if (e.type === "troll") { chaseRange = 280; spd = 1.8; dmg = 0.7; }
+    else if (e.type === "golem") { chaseRange = 200; spd = 1.4; dmg = 0.8; }
+    else if (e.type === "wildcat") { chaseRange = 300; spd = 2.6; dmg = 0.35; }
+    else if (e.type === "bat") { chaseRange = 400; spd = 3.2; dmg = 0.2; }
+    else if (e.type === "spiderbeast") { chaseRange = 350; spd = 2.4; dmg = 0.45; }
+    else if (e.type === "lizard") { chaseRange = 250; spd = 2.1; dmg = 0.25; }
+    else if (e.type === "wraith") { chaseRange = 400; spd = 2.9; dmg = 0.9; }
+    else if (e.type === "skeleton") { chaseRange = 280; spd = 2.0; dmg = 0.5; }
 
     if (d < chaseRange && !inCity(e.x, e.y) && !isInWater(e.x, e.y)) {
       let nx2 = e.x + dx / d * spd;
@@ -564,11 +777,35 @@ function update() {
 
   enemies = enemies.filter(e => {
     if (e.hp <= 0) {
-      let loot = e.type === "bear" ? "🐻" : e.type === "demon" ? "👹" : e.type === "beast" ? "🐲" : "🦴";
+      let lootMap = {
+        bear: "🐻", demon: "👹", beast: "🐲", wolf: "🦴",
+        troll: "🗻", golem: "🪨", wildcat: "🐾", bat: "🦇",
+        spiderbeast: "🕷️", lizard: "🦎", wraith: "👻", skeleton: "💀"
+      };
+      let loot = lootMap[e.type] || "🦴";
       player.inv[loot] = (player.inv[loot] || 0) + 1;
-      player.karma += 2;
       
-      let xpReward = e.type === "bear" ? 25 : e.type === "demon" ? 50 : e.type === "beast" ? 45 : 15;
+      // Karma sólo sube si matas enemigos FUERA de ciudades
+      let isOutsideCity = !inCity(e.x, e.y);
+      if (isOutsideCity) {
+        let karmaGain = parseInt(currentConfig.karma_multiplier) || 1;
+        player.karma += 2 * karmaGain;
+      }
+      
+      let xpReward = 0;
+      if (e.type === "bear") xpReward = 25;
+      else if (e.type === "demon") xpReward = 50;
+      else if (e.type === "beast") xpReward = 45;
+      else if (e.type === "wolf") xpReward = 15;
+      else if (e.type === "troll") xpReward = 55;
+      else if (e.type === "golem") xpReward = 60;
+      else if (e.type === "wildcat") xpReward = 30;
+      else if (e.type === "bat") xpReward = 12;
+      else if (e.type === "spiderbeast") xpReward = 40;
+      else if (e.type === "lizard") xpReward = 18;
+      else if (e.type === "wraith") xpReward = 70;
+      else if (e.type === "skeleton") xpReward = 35;
+      
       gainXP(xpReward);
       killCount++;
       
@@ -587,6 +824,26 @@ function update() {
 
   particles.forEach(p => { p.x += p.dx; p.y += p.dy; p.life--; p.dx *= 0.95; p.dy *= 0.95; });
   particles = particles.filter(p => p.life > 0);
+
+  // Actualizar items drapeados
+  droppedItems.forEach(item => item.life--);
+  droppedItems = droppedItems.filter(item => {
+    if (item.life <= 0) return false;
+    // Recoger item si el jugador está cerca
+    if (Math.hypot(player.x - item.x, player.y - item.y) < 25) {
+      player.inv[item.icon] = (player.inv[item.icon] || 0) + item.count;
+      showNotification(`📦 +${item.icon} x${item.count}`);
+      return false;
+    }
+    return true;
+  });
+
+  // Actualizar ciclo día/noche
+  dayLength = parseInt(currentConfig.day_duration) || 120;
+  gameTime += 1 / 60; // ~60 FPS
+  if (gameTime >= dayLength * 2) gameTime = 0; // Ciclo completo día+noche
+  
+  isDay = gameTime < dayLength;
 
   if (player.hp <= 0) {
     player.dead = true;
@@ -636,7 +893,14 @@ function draw() {
 
   ctx.clearRect(0, 0, W, H);
 
-  ctx.fillStyle = '#0f2010';
+  // Fondo con ciclo día/noche
+  let bgColor = isDay ? '#0f2010' : '#0a050f';
+  let overlayAlpha = isDay ? 0 : 0.4;
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, W, H);
+  
+  // Superponer oscuridad en la noche
+  ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
   ctx.fillRect(0, 0, W, H);
 
   dangerZones.forEach(z => {
@@ -648,6 +912,19 @@ function draw() {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(z.x - camX, z.y - camY, z.r, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  // Dibujar aguas profundas
+  deepWaters.forEach(w => {
+    ctx.fillStyle = '#0a2a5a';
+    ctx.beginPath();
+    ctx.arc(w.x - camX, w.y - camY, w.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#082a4a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(w.x - camX, w.y - camY, w.r, 0, Math.PI * 2);
     ctx.stroke();
   });
 
@@ -780,13 +1057,32 @@ function draw() {
 
   projectiles.forEach(p => {
     let sx = p.x - camX, sy = p.y - camY;
-    ctx.fillStyle = '#ffaa00';
-    ctx.shadowColor = '#ffaa00';
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
-    ctx.fill();
+    if (p.type === 'fireball') {
+      ctx.fillStyle = '#ff8833';
+      ctx.shadowColor = '#ff6600';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#ffaa00';
+      ctx.shadowColor = '#ffaa00';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.shadowBlur = 0;
+  });
+
+  // Dibujar items drapeados
+  droppedItems.forEach(item => {
+    let sx = item.x - camX, sy = item.y - camY;
+    ctx.globalAlpha = 0.7 + Math.sin(Date.now() / 300) * 0.3;
+    ctx.font = '20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(item.icon, sx, sy);
+    ctx.globalAlpha = 1;
   });
 
   particles.forEach(p => {
@@ -1161,5 +1457,5 @@ function loop() {
 updateInventory();
 loop();
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e3c369522f0227f',t:'MTc3NDc1OTQwMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e3c4679624b31d8',t:'MTc3NDc2MDA1Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
