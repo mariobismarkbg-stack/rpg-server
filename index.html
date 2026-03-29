@@ -31,34 +31,8 @@ canvas { background:#111; margin-top:20px; }
     color: white;
 }
 </style>
-
 </head>
-<meta charset="UTF-8">
-<title>My world new</title>
-<style>
-body { background:black; color:white; text-align:center; }
-canvas { background:#111; margin-top:20px; }
-</style>#inventory {
-    position: fixed;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: grid;
-    grid-template-columns: repeat(5, 50px);
-    gap: 5px;
-}
 
-.slot {
-    width: 50px;
-    height: 50px;
-    background: #222;
-    border: 2px solid #555;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-}
-</head>
 <body>
 
 <h1>🌍 RPG Online PRO</h1>
@@ -67,6 +41,7 @@ canvas { background:#111; margin-top:20px; }
 
 <canvas id="game" width="600" height="400"></canvas>
 <div id="inventory"></div>
+
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -95,7 +70,6 @@ function conectar() {
         try {
             players = JSON.parse(e.data);
 
-            // detectar tu karma
             for (let id in players) {
                 let p = players[id];
 
@@ -140,7 +114,6 @@ let camera = { x: 0, y: 0 };
 let keys = {};
 document.addEventListener("keydown", (e) => {
     keys[e.key] = true;
-
     if (e.key === " ") attack = true;
 });
 
@@ -155,7 +128,7 @@ function update() {
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
 
-    // distancia a zonas
+    // zonas
     let dxSafe = player.x - safeZone.x;
     let dySafe = player.y - safeZone.y;
     let inSafe = Math.sqrt(dxSafe*dxSafe + dySafe*dySafe) < safeZone.r;
@@ -164,21 +137,19 @@ function update() {
     let dyDark = player.y - darkZone.y;
     let inDark = Math.sqrt(dxDark*dxDark + dyDark*dyDark) < darkZone.r;
 
-    // bloquear ataque en ciudad
     if (inSafe) attack = false;
 
-    // bloquear acceso zona oscura si no eres malo
     if (inDark && myKarma > -20) {
         player.x -= dxDark * 0.05;
         player.y -= dyDark * 0.05;
     }
 
-    // cambio automático por karma
+    // clases por karma
     if (myKarma > 20) player.class = "paladin";
     else if (myKarma < -20) player.class = "oscuro";
     else player.class = "guerrero";
 
-    // ataque a enemigos
+    // combate
     if (attack) {
         enemies.forEach(e => {
             let dx = e.x - player.x;
@@ -186,8 +157,7 @@ function update() {
             let dist = Math.sqrt(dx*dx + dy*dy);
 
             if (dist < 60) {
-                let dmg = player.class === "mago" ? 15 : 10;
-                e.hp -= dmg;
+                e.hp -= 10;
 
                 if (e.hp <= 0) {
                     e.hp = 50;
@@ -213,13 +183,14 @@ function update() {
     camera.x = player.x - canvas.width / 2;
     camera.y = player.y - canvas.height / 2;
 }
+
+// inventario
 function drawInventory() {
     const inv = document.getElementById("inventory");
     inv.innerHTML = "";
 
     let counts = {};
 
-    // contar items
     player.inventory.forEach(item => {
         counts[item] = (counts[item] || 0) + 1;
     });
@@ -237,52 +208,21 @@ function drawInventory() {
         inv.appendChild(slot);
     }
 }
+
 // draw
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // fondo
     ctx.fillStyle = "#2e8b57";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // zonas
-    ctx.fillStyle = "rgba(0,255,0,0.2)";
-    ctx.beginPath();
-    ctx.arc(safeZone.x - camera.x, safeZone.y - camera.y, safeZone.r, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = "rgba(100,0,100,0.3)";
-    ctx.beginPath();
-    ctx.arc(darkZone.x - camera.x, darkZone.y - camera.y, darkZone.r, 0, Math.PI*2);
-    ctx.fill();
-
-    // enemigos
-    enemies.forEach(e => {
-        ctx.fillStyle = "purple";
-        ctx.fillRect(e.x - camera.x, e.y - camera.y, 20, 20);
-
-        ctx.fillStyle = "red";
-        ctx.fillRect(e.x - camera.x, e.y - camera.y - 10, e.hp, 3);
-    });
-
-    // otros jugadores
-    for (let id in players) {
-        let p = players[id];
-        if (!p) continue;
-
-        ctx.fillStyle = "red";
-        ctx.fillRect(p.x - camera.x, p.y - camera.y, 20, 30);
-    }
 
     // jugador
     if (player.class === "paladin") ctx.fillStyle = "gold";
     else if (player.class === "oscuro") ctx.fillStyle = "purple";
-    else if (player.class === "mago") ctx.fillStyle = "cyan";
     else ctx.fillStyle = "blue";
 
     ctx.fillRect(player.x - camera.x, player.y - camera.y, 20, 30);
 
-    // UI
     document.getElementById("info").innerText =
         "Clase: " + player.class +
         " | Karma: " + myKarma +
@@ -293,7 +233,7 @@ function draw() {
 function loop() {
     update();
     draw();
-    drawInventory(); // 🔥 nuevo
+    drawInventory();
     requestAnimationFrame(loop);
 }
 
