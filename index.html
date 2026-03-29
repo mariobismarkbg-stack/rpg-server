@@ -2,12 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RPG PRO FIXED</title>
+<title>RPG PRO+</title>
 
 <style>
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:20px; }
 
+/* INVENTARIO */
 #inventory {
     position: fixed;
     bottom: 10px;
@@ -27,17 +28,35 @@ canvas { background:#111; margin-top:20px; }
     align-items:center;
     justify-content:center;
     flex-direction:column;
+    cursor:pointer;
+}
+
+/* MENU PERSONAJE */
+#menu {
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    background: #111;
+    border: 2px solid #777;
+    padding: 10px;
+    display: none;
 }
 </style>
 </head>
 
 <body>
 
-<h1>🌍 RPG PRO</h1>
+<h1>🌍 RPG PRO+</h1>
 <p id="info"></p>
 
 <canvas id="game" width="600" height="400"></canvas>
+
 <div id="inventory"></div>
+
+<div id="menu">
+<h3>Personaje</h3>
+<p id="stats"></p>
+</div>
 
 <script>
 const canvas = document.getElementById("game");
@@ -45,56 +64,19 @@ const ctx = canvas.getContext("2d");
 
 // jugador
 let player = {
-    x:1000,
-    y:1000,
+    x:1000,y:1000,
     speed:4,
-    hp:100,
-    maxHp:100,
-    inventory:[]
+    hp:100,maxHp:100,
+    inventory:["🧪","🪵"],
+    weapon:"ninguna"
 };
 
-let keys={};
-let attack=false, skillQ=false, skillE=false;
+let keys={}, attack=false, skillQ=false, skillE=false;
 let animFrame=0, moving=false;
 
-// mundo
-let waterZones=[];
-for(let i=0;i<4;i++){
-    waterZones.push({
-        x:Math.random()*1500,
-        y:Math.random()*1500,
-        w:400,
-        h:400
-    });
-}
-
-function inWater(x,y){
-    return waterZones.some(w =>
-        x < w.x+w.w && x+20 > w.x &&
-        y < w.y+w.h && y+20 > w.y
-    );
-}
-
-// árboles y rocas FUERA del agua
-let trees=[], rocks=[];
-
-for(let i=0;i<80;i++){
-    let x,y;
-    do{
-        x=Math.random()*2000;
-        y=Math.random()*2000;
-    }while(inWater(x,y));
-    trees.push({x,y,hp:30,cut:false});
-}
-
-for(let i=0;i<60;i++){
-    let x,y;
-    do{
-        x=Math.random()*2000;
-        y=Math.random()*2000;
-    }while(inWater(x,y));
-    rocks.push({x,y});
-}
+// zonas
+const safeZone = { x:1000, y:1000, r:300 };
+const dangerZone = { x:1500, y:1500, r:400 };
 
 // enemigos
 let enemies=[];
@@ -103,9 +85,6 @@ for(let i=0;i<10;i++){
         x:Math.random()*2000,
         y:Math.random()*2000,
         hp:50,
-        state:"idle",
-        dirX:(Math.random()-0.5)*2,
-        dirY:(Math.random()-0.5)*2,
         cooldown:0
     });
 }
@@ -116,120 +95,82 @@ document.addEventListener("keydown",e=>{
     if(e.key===" ") attack=true;
     if(e.key==="q") skillQ=true;
     if(e.key==="e") skillE=true;
+
+    if(e.key==="i"){
+        let m=document.getElementById("menu");
+        m.style.display = m.style.display==="none"?"block":"none";
+    }
 });
 document.addEventListener("keyup",e=>keys[e.key]=false);
 
-// colisión
-function collide(x,y,ox,oy,size){
-    return x<ox+size && x+20>ox && y<oy+size && y+20>oy;
+// INVENTARIO CLICK
+function useItem(item){
+    if(item==="🧪"){
+        player.hp = Math.min(player.hp+30, player.maxHp);
+    }
 }
 
-// visión bloqueada
-function blockedVision(x1,y1,x2,y2){
-    for(let t of trees){
-        if(!t.cut && Math.abs(t.x-x1)<50 && Math.abs(t.y-y1)<50){
-            return true;
-        }
-    }
-    for(let r of rocks){
-        if(Math.abs(r.x-x1)<50 && Math.abs(r.y-y1)<50){
-            return true;
-        }
-    }
-    return false;
+// dibujar inventario
+function drawInventory(){
+    const inv=document.getElementById("inventory");
+    inv.innerHTML="";
+
+    player.inventory.forEach((item,i)=>{
+        let s=document.createElement("div");
+        s.className="slot";
+        s.innerText=item;
+
+        s.onclick=()=>{
+            useItem(item);
+            player.inventory.splice(i,1);
+        };
+
+        inv.appendChild(s);
+    });
 }
 
 // update
 function update(){
 
-let newX=player.x;
-let newY=player.y;
 moving=false;
 
-if(keys["w"]){newY-=player.speed; moving=true;}
-if(keys["s"]){newY+=player.speed; moving=true;}
-if(keys["a"]){newX-=player.speed; moving=true;}
-if(keys["d"]){newX+=player.speed; moving=true;}
-
-let blocked=false;
-
-trees.forEach(t=>{
-    if(!t.cut && collide(newX,newY,t.x,t.y,30)) blocked=true;
-});
-
-rocks.forEach(r=>{
-    if(collide(newX,newY,r.x,r.y,25)) blocked=true;
-});
-
-if(inWater(newX,newY)) blocked=true;
-
-if(!blocked){
-    player.x=newX;
-    player.y=newY;
-}
+if(keys["w"]){player.y-=player.speed; moving=true;}
+if(keys["s"]){player.y+=player.speed; moving=true;}
+if(keys["a"]){player.x-=player.speed; moving=true;}
+if(keys["d"]){player.x+=player.speed; moving=true;}
 
 if(moving) animFrame+=0.3;
 else animFrame=0;
 
-// enemigos IA
+// zonas
+let dxs=player.x-safeZone.x;
+let dys=player.y-safeZone.y;
+let inSafe=Math.sqrt(dxs*dxs+dys*dys)<safeZone.r;
+
+let dxd=player.x-dangerZone.x;
+let dyd=player.y-dangerZone.y;
+let inDanger=Math.sqrt(dxd*dxd+dyd*dyd)<dangerZone.r;
+
+// enemigos
 enemies.forEach(e=>{
     let dx=player.x-e.x;
     let dy=player.y-e.y;
     let dist=Math.sqrt(dx*dx+dy*dy);
 
-    if(dist<200 && !blockedVision(e.x,e.y,player.x,player.y)){
-        e.state="chase";
-    } else if(dist>250){
-        e.state="idle";
-    }
-
-    if(e.state==="chase"){
+    if(dist<200){
         let ang=Math.atan2(dy,dx);
         e.x+=Math.cos(ang)*1.5;
         e.y+=Math.sin(ang)*1.5;
-    } else {
-        e.x+=e.dirX;
-        e.y+=e.dirY;
     }
 
-    // daño jugador
-    if(dist<30 && e.cooldown<=0){
-        player.hp-=5;
+    if(dist<30 && e.cooldown<=0 && !inSafe){
+        let dmg = inDanger ? 10 : 5;
+        player.hp-=dmg;
         e.cooldown=30;
     }
 
     if(e.cooldown>0) e.cooldown--;
 });
-
-// habilidades
-let range=0, dmg=0;
-
-if(attack){ range=60; dmg=10; }
-if(skillQ){ range=100; dmg=20; }
-if(skillE){ range=150; dmg=8; }
-
-if(range>0){
-    enemies.forEach(e=>{
-        let dx=e.x-player.x;
-        let dy=e.y-player.y;
-        let dist=Math.sqrt(dx*dx+dy*dy);
-
-        if(dist<range){
-            e.hp-=dmg;
-
-            if(e.hp<=0){
-                e.hp=50;
-                e.x=Math.random()*2000;
-                e.y=Math.random()*2000;
-                player.inventory.push("💎");
-            }
-        }
-    });
-}
-
-attack=false;
-skillQ=false;
-skillE=false;
 
 // muerte
 if(player.hp<=0){
@@ -237,6 +178,10 @@ if(player.hp<=0){
     player.x=1000;
     player.y=1000;
 }
+
+// UI stats
+document.getElementById("stats").innerText =
+"HP: "+player.hp+"\nArma: "+player.weapon;
 
 }
 
@@ -249,25 +194,16 @@ ctx.clearRect(0,0,canvas.width,canvas.height);
 ctx.fillStyle="#2e8b57";
 ctx.fillRect(0,0,canvas.width,canvas.height);
 
-// agua
-waterZones.forEach(w=>{
-    ctx.fillStyle="blue";
-    ctx.fillRect(w.x-player.x+300,w.y-player.y+200,w.w,w.h);
-});
+// zonas
+ctx.fillStyle="rgba(0,255,0,0.2)";
+ctx.beginPath();
+ctx.arc(safeZone.x-player.x+300,safeZone.y-player.y+200,safeZone.r,0,Math.PI*2);
+ctx.fill();
 
-// árboles
-trees.forEach(t=>{
-    if(!t.cut){
-        ctx.fillStyle="green";
-        ctx.fillRect(t.x-player.x+300,t.y-player.y+200,30,30);
-    }
-});
-
-// rocas
-rocks.forEach(r=>{
-    ctx.fillStyle="gray";
-    ctx.fillRect(r.x-player.x+300,r.y-player.y+200,25,25);
-});
+ctx.fillStyle="rgba(255,0,0,0.2)";
+ctx.beginPath();
+ctx.arc(dangerZone.x-player.x+300,dangerZone.y-player.y+200,dangerZone.r,0,Math.PI*2);
+ctx.fill();
 
 // enemigos
 enemies.forEach(e=>{
@@ -275,32 +211,41 @@ enemies.forEach(e=>{
     ctx.fillRect(e.x-player.x+300,e.y-player.y+200,20,20);
 });
 
-// jugador con animación
+// 🧍 jugador con cabeza
 let offset=Math.sin(animFrame)*5;
 
-ctx.fillStyle="cyan";
+// cuerpo
+ctx.fillStyle="blue";
 ctx.fillRect(300,200+offset,20,20);
+
+// cabeza
+ctx.fillStyle="#ffcc99";
+ctx.fillRect(305,190+offset,10,10);
 
 // piernas
 ctx.fillRect(302,220+Math.sin(animFrame)*5,5,10);
 ctx.fillRect(312,220-Math.sin(animFrame)*5,5,10);
 
-// vida
+// barra vida
 ctx.fillStyle="red";
 ctx.fillRect(20,20,200,10);
 ctx.fillStyle="lime";
 ctx.fillRect(20,20,(player.hp/player.maxHp)*200,10);
 
+// info
 document.getElementById("info").innerText =
-"HP: "+player.hp+" | Inv: "+player.inventory.length;
+"HP: "+player.hp+" | Inventario: "+player.inventory.length;
+
 }
 
 // loop
 function loop(){
 update();
 draw();
+drawInventory();
 requestAnimationFrame(loop);
 }
+
 loop();
 </script>
 
