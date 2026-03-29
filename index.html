@@ -103,7 +103,8 @@ canvas { display: block; }
     E — hablar NPC<br>
     M — mapa<br>
     P — personaje<br>
-    I — inventario
+    I — inventario<br>
+    S — estadísticas
   </div>
   <div id="inventory"></div>
   <div id="deathScreen">
@@ -149,6 +150,18 @@ canvas { display: block; }
     </div><button onclick="closeInventory()" style="width: 100%; padding: 10px; margin-top: 20px; background: #2a2a3a; color: #c9a84c; border: 2px solid #c9a84c; border-radius: 6px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 14px;">Cerrar</button>
    </div>
   </div>
+  <div id="statsScreen" style="position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: none; z-index: 100; overflow: auto; padding: 40px;">
+   <div style="max-width: 600px; margin: auto; color: #e8dcc8; font-family: 'Almendra', serif;">
+    <h1 style="font-family: 'Cinzel', serif; color: #c9a84c; text-align: center; margin-bottom: 30px;">⭐ ESTADÍSTICAS</h1>
+    <div style="background: #1a1a2e; border: 2px solid #c9a84c; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+     <div id="statsDisplay" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;"></div>
+     <div id="pointsRemaining" style="text-align: center; color: #ffd700; font-weight: bold; font-size: 16px; margin-bottom: 20px;">
+      Puntos disponibles: <span id="pointsCount">0</span>
+     </div>
+     <div id="statButtonsContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;"></div>
+    </div><button onclick="closeStats()" style="width: 100%; padding: 10px; background: #2a2a3a; color: #c9a84c; border: 2px solid #c9a84c; border-radius: 6px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 14px;">Cerrar</button>
+   </div>
+  </div>
   <script>
     document.addEventListener('keydown', (e) => {
       if (e.key.toLowerCase() === 'm') {
@@ -176,7 +189,9 @@ const defaultConfig = {
   tree_harvest_xp: "10",
   skill_cooldown: "1000",
   day_duration: "120",
-  karma_multiplier: "1"
+  karma_multiplier: "1",
+  max_stack_items: "99",
+  regen_speed: "2"
 };
 
 let currentConfig = { ...defaultConfig };
@@ -201,29 +216,36 @@ function applyConfig(cfg) {
   });
 }
 
-window.elementSdk.init({
-  defaultConfig,
-  onConfigChange: async (cfg) => applyConfig(cfg),
-  mapToCapabilities: (cfg) => ({
-    recolorables: [
-      { get: () => cfg.background_color || defaultConfig.background_color, set: v => { cfg.background_color = v; window.elementSdk.setConfig({ background_color: v }); } },
-      { get: () => cfg.accent_color || defaultConfig.accent_color, set: v => { cfg.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); } }
-    ],
-    borderables: [],
-    fontEditable: undefined,
-    fontSizeable: undefined
-  }),
-  mapToEditPanelValues: (cfg) => new Map([
-    ["game_title", cfg.game_title || defaultConfig.game_title],
-    ["tree_harvest_xp", cfg.tree_harvest_xp || defaultConfig.tree_harvest_xp],
-    ["skill_cooldown", cfg.skill_cooldown || defaultConfig.skill_cooldown],
-    ["day_duration", cfg.day_duration || defaultConfig.day_duration],
-    ["karma_multiplier", cfg.karma_multiplier || defaultConfig.karma_multiplier]
-  ])
-});
+applyConfig(currentConfig);
+
+if (window.elementSdk) {
+  window.elementSdk.init({
+    defaultConfig,
+    onConfigChange: async (cfg) => applyConfig(cfg),
+    mapToCapabilities: (cfg) => ({
+      recolorables: [
+        { get: () => cfg.background_color || defaultConfig.background_color, set: v => { cfg.background_color = v; window.elementSdk.setConfig({ background_color: v }); } },
+        { get: () => cfg.accent_color || defaultConfig.accent_color, set: v => { cfg.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); } }
+      ],
+      borderables: [],
+      fontEditable: undefined,
+      fontSizeable: undefined
+    }),
+    mapToEditPanelValues: (cfg) => new Map([
+      ["game_title", cfg.game_title || defaultConfig.game_title],
+      ["tree_harvest_xp", cfg.tree_harvest_xp || defaultConfig.tree_harvest_xp],
+      ["skill_cooldown", cfg.skill_cooldown || defaultConfig.skill_cooldown],
+      ["day_duration", cfg.day_duration || defaultConfig.day_duration],
+      ["karma_multiplier", cfg.karma_multiplier || defaultConfig.karma_multiplier],
+      ["max_stack_items", cfg.max_stack_items || defaultConfig.max_stack_items],
+      ["regen_speed", cfg.regen_speed || defaultConfig.regen_speed]
+    ])
+  });
+}
 
 function closeCharacter() { document.getElementById('characterScreen').style.display = 'none'; }
 function closeInventory() { document.getElementById('inventoryScreen').style.display = 'none'; }
+function closeStats() { document.getElementById('statsScreen').style.display = 'none'; }
 function openCharacter() { 
   document.getElementById('characterScreen').style.display = 'block';
   updateCharacterDisplay();
@@ -231,6 +253,10 @@ function openCharacter() {
 function openInventory() { 
   document.getElementById('inventoryScreen').style.display = 'block';
   updateInventoryDisplay();
+}
+function openStats() {
+  document.getElementById('statsScreen').style.display = 'block';
+  updateStatsDisplay();
 }
 function openFullMap() { 
   document.getElementById('mapScreen').style.display = 'block';
@@ -265,7 +291,21 @@ let player = {
   anim: 0,
   dir: 0,
   dead: false,
-  attackCooldown: 0
+  deathCount: 0, // Contador de muertes para clases ocultas
+  attackCooldown: 0,
+  // Stats system
+  stats: {
+    attack: 10,
+    defense: 5,
+    intelligence: 5,
+    health: 10,
+    mobility: 10,
+    dexterity: 8
+  },
+  statPoints: 0,
+  classPath: null, // "soldado", "mago", "cazador", "escudero", "vengador", "gould"
+  classAbilities: [],
+  classChosen: false // Saber si ya eligió clase en nivel 10
 };
 
 let keys = {};
@@ -276,9 +316,43 @@ document.addEventListener("keydown", e => {
   keys[e.key.toLowerCase()] = true;
   if (e.key === " ") { e.preventDefault(); attackPressed = true; }
   if (e.key.toLowerCase() === "e") interactPressed = true;
-  if (e.key.toLowerCase() === "m") { e.preventDefault(); openFullMap(); }
-  if (e.key.toLowerCase() === "p") { e.preventDefault(); openCharacter(); }
-  if (e.key.toLowerCase() === "i") { e.preventDefault(); openInventory(); }
+  if (e.key.toLowerCase() === "m") { 
+    e.preventDefault(); 
+    const mapScreen = document.getElementById('mapScreen');
+    if (mapScreen.style.display === 'none' || mapScreen.style.display === '') {
+      mapScreen.style.display = 'block';
+      drawFullMap();
+    } else {
+      mapScreen.style.display = 'none';
+    }
+  }
+  if (e.key.toLowerCase() === "p") { 
+    e.preventDefault(); 
+    const charScreen = document.getElementById('characterScreen');
+    if (charScreen.style.display === 'none' || charScreen.style.display === '') {
+      openCharacter();
+    } else {
+      closeCharacter();
+    }
+  }
+  if (e.key.toLowerCase() === "i") { 
+    e.preventDefault(); 
+    const invScreen = document.getElementById('inventoryScreen');
+    if (invScreen.style.display === 'none' || invScreen.style.display === '') {
+      openInventory();
+    } else {
+      closeInventory();
+    }
+  }
+  if (e.key.toLowerCase() === "s") { 
+    e.preventDefault(); 
+    const statsScreen = document.getElementById('statsScreen');
+    if (statsScreen.style.display === 'none' || statsScreen.style.display === '') {
+      openStats();
+    } else {
+      closeStats();
+    }
+  }
   if (e.key.toLowerCase() === "q") { e.preventDefault(); castSkill('fireball'); }
   if (e.key.toLowerCase() === "w") { e.preventDefault(); castSkill('heal'); }
   if (e.key.toLowerCase() === "e") { e.preventDefault(); castSkill('chop'); }
@@ -392,7 +466,8 @@ const trees = Array.from({ length: 280 }, () => ({
 
 const rocks = Array.from({ length: 120 }, () => ({
   x: Math.random() * MAP, y: Math.random() * MAP,
-  size: 12 + Math.random() * 18
+  size: 12 + Math.random() * 18,
+  mined: false
 })).filter(r => !inLake(r.x, r.y) && !inCity(r.x, r.y));
 
 const flowers = Array.from({ length: 200 }, () => ({
@@ -428,6 +503,72 @@ let skills = {
   heal: { cooldown: 0, maxCooldown: 2000, mana: 50, healing: 40 },
   chop: { cooldown: 0, maxCooldown: 800, mana: 0, range: 50 }
 };
+
+// Definir habilidades por clase
+const classAbilitiesMap = {
+  "mago": {
+    name: "🔮 Mago",
+    icon: "🔮",
+    bonusStats: { intelligence: 3, mana: 20 },
+    abilities: [
+      { name: "Bola de Fuego", icon: "🔥", mana: 30, cooldown: 1500, bonus: "intelligence" },
+      { name: "Rayo", icon: "⚡", mana: 40, cooldown: 1200, bonus: "intelligence" }
+    ]
+  },
+  "soldado": {
+    name: "🛡️ Soldado",
+    icon: "🛡️",
+    bonusStats: { attack: 3, defense: 2 },
+    abilities: [
+      { name: "Corte", icon: "🗡️", mana: 0, cooldown: 800, bonus: "attack" },
+      { name: "Defensa", icon: "🛡️", mana: 10, cooldown: 1000, bonus: "defense" }
+    ]
+  },
+  "cazador": {
+    name: "🏹 Cazador",
+    icon: "🏹",
+    bonusStats: { dexterity: 3, mobility: 2 },
+    abilities: [
+      { name: "Flecha", icon: "🏹", mana: 5, cooldown: 600, bonus: "dexterity" },
+      { name: "Trampa", icon: "🪤", mana: 20, cooldown: 1800, bonus: "dexterity" }
+    ]
+  },
+  "escudero": {
+    name: "🏰 Escudero",
+    icon: "🏰",
+    bonusStats: { defense: 4, health: 2 },
+    abilities: [
+      { name: "Protección", icon: "⛑️", mana: 15, cooldown: 1200, bonus: "defense" },
+      { name: "Escudo Divino", icon: "✨", mana: 30, cooldown: 2000, bonus: "defense" }
+    ]
+  },
+  "vengador": {
+    name: "⚔️ Vengador",
+    icon: "⚔️",
+    hidden: true,
+    bonusStats: { intelligence: 2, attack: 3, mana: 15 },
+    abilities: [
+      { name: "Venganza", icon: "🔥", mana: 35, cooldown: 1000, bonus: "intelligence" },
+      { name: "Golpe Vengador", icon: "⚡", mana: 20, cooldown: 1200, bonus: "attack" },
+      { name: "Ira Arcana", icon: "✨", mana: 50, cooldown: 2000, bonus: "intelligence" }
+    ]
+  },
+  "gould": {
+    name: "👻 No-Muerto (Gould)",
+    icon: "👻",
+    hidden: true,
+    bonusStats: { health: 4, defense: 3 },
+    abilities: [
+      { name: "Lamento", icon: "💀", mana: 15, cooldown: 1000, bonus: "health" },
+      { name: "Maldición", icon: "🪦", mana: 25, cooldown: 1500, bonus: "defense" },
+      { name: "Resurrección", icon: "🔄", mana: 60, cooldown: 3000, bonus: "health" }
+    ]
+  }
+};
+
+let lastRegenTime = 0;
+let inCombat = false;
+let combatTimeout = null;
 
 function castSkill(skillName) {
   const skill = skills[skillName];
@@ -492,11 +633,27 @@ function castSkill(skillName) {
         player.inv['🪵'] = (player.inv['🪵'] || 0) + 1;
         trees.splice(i, 1);
         showNotification(`🪵 +${xpReward} XP`);
+        inCombat = false;
+        clearTimeout(combatTimeout);
+      }
+    }
+    
+    // Romper rocas
+    for (let i = rocks.length - 1; i >= 0; i--) {
+      let r = rocks[i];
+      if (Math.hypot(player.x - r.x, player.y - r.y) < 80 && !r.mined) {
+        r.mined = true;
+        spawnParticles(r.x, r.y, '#999', 15);
+        player.inv['🪨'] = (player.inv['🪨'] || 0) + 2;
+        showNotification(`🪨 +2 Piedras`);
+        inCombat = false;
+        clearTimeout(combatTimeout);
       }
     }
   }
   
   updateSkillButtons();
+}
 }
 
 function updateSkillButtons() {
@@ -577,23 +734,36 @@ function gainXP(amount) {
     player.level++;
     player.xp = 0;
     player.xpMax = Math.floor(player.xpMax * 1.2);
+    player.statPoints += 2; // 2 puntos por nivel
     
-    if (player.level === 2) player.cls = "guerrero";
-    if (player.level === 5) player.cls = "mago";
-    if (player.level === 10) player.cls = "leyenda";
+    // Determinar clase según nivel
+    if (player.level === 10 && !player.classChosen) {
+      showClassSelectionUI();
+    } else if (player.level === 15 && !player.classChosen) {
+      // Si llegó al nivel 15 sin elegir clase, muestra clases ocultas
+      showHiddenClassSelectionUI();
+    }
     
-    let maxManaGain = player.level <= 2 ? 5 : player.level <= 5 ? 15 : 30;
+    let maxManaGain = player.level <= 5 ? 5 : player.level <= 10 ? 15 : 30;
     player.maxMana += maxManaGain;
     player.mana = player.maxMana;
     player.maxHp += 10 + player.level * 2;
     player.hp = player.maxHp;
     
     const levelUpBox = document.getElementById('levelUp');
-    const classNames = {guerrero: "⚔️ Guerrero", mago: "🔮 Mago", leyenda: "👑 Leyenda", aldeano: "⚔️ Aldeano"};
-    document.getElementById('levelUpText').textContent = classNames[player.cls];
+    const classNames = {
+      soldado: "🛡️ Soldado", 
+      mago: "🔮 Mago", 
+      cazador: "🏹 Cazador", 
+      escudero: "🏰 Escudero",
+      vengador: "⚔️ Vengador",
+      gould: "👻 No-Muerto",
+      aldeano: "⚔️ Aldeano"
+    };
+    document.getElementById('levelUpText').textContent = classNames[player.classPath || player.cls];
     levelUpBox.style.display = 'block';
     setTimeout(() => levelUpBox.style.display = 'none', 2000);
-    showNotification(`¡NIVEL ${player.level}! ${classNames[player.cls]}`);
+    showNotification(`¡NIVEL ${player.level}! +2 puntos de estadísticas`);
   }
 }
 
@@ -697,12 +867,30 @@ function update() {
   if (attackPressed && player.attackCooldown <= 0 && player.mana >= 5) {
     player.mana -= 5;
     player.attackCooldown = 12;
-    let dx = 0, dy = 0;
-    if (player.dir === 0) dy = -8;
-    if (player.dir === 1) dx = 8;
-    if (player.dir === 2) dy = 8;
-    if (player.dir === 3) dx = -8;
-    projectiles.push({ x: player.x, y: player.y, dx, dy, life: 60 });
+    
+    inCombat = true;
+    clearTimeout(combatTimeout);
+    combatTimeout = setTimeout(() => { inCombat = false; }, 3000);
+    
+    // Lanzar piedras si las tiene
+    if (player.inv['🪨'] && player.inv['🪨'] > 0) {
+      player.inv['🪨']--;
+      let dx = 0, dy = 0;
+      if (player.dir === 0) dy = -8;
+      if (player.dir === 1) dx = 8;
+      if (player.dir === 2) dy = 8;
+      if (player.dir === 3) dx = -8;
+      projectiles.push({ x: player.x, y: player.y, dx, dy, life: 80, type: 'stone', damage: 20 });
+      showNotification("🪨 Lanzaste una piedra!");
+    } else {
+      // Ataque básico sin piedras
+      let dx = 0, dy = 0;
+      if (player.dir === 0) dy = -8;
+      if (player.dir === 1) dx = 8;
+      if (player.dir === 2) dy = 8;
+      if (player.dir === 3) dx = -8;
+      projectiles.push({ x: player.x, y: player.y, dx, dy, life: 60, type: 'slash', damage: 12 });
+    }
     attackPressed = false;
   } else {
     attackPressed = false;
@@ -772,6 +960,9 @@ function update() {
     if (d < 22) {
       player.hp -= dmg;
       spawnParticles(player.x, player.y, '#f88', 2);
+      inCombat = true;
+      clearTimeout(combatTimeout);
+      combatTimeout = setTimeout(() => { inCombat = false; }, 3000);
     }
   });
 
@@ -843,10 +1034,21 @@ function update() {
   gameTime += 1 / 60; // ~60 FPS
   if (gameTime >= dayLength * 2) gameTime = 0; // Ciclo completo día+noche
   
-  isDay = gameTime < dayLength;
+  // Inicialmente siempre es de día
+  isDay = gameTime < dayLength * 0.8;
+
+  // Auto regeneración fuera de combate
+  const regenSpeed = parseInt(currentConfig.regen_speed) || 2;
+  lastRegenTime++;
+  if (!inCombat && lastRegenTime >= regenSpeed * 60) {
+    lastRegenTime = 0;
+    if (player.hp < player.maxHp) player.hp = Math.min(player.hp + 1, player.maxHp);
+    if (player.mana < player.maxMana) player.mana = Math.min(player.mana + 1, player.maxMana);
+  }
 
   if (player.hp <= 0) {
     player.dead = true;
+    player.deathCount++;
     document.getElementById('deathScreen').style.display = 'flex';
   }
 
@@ -857,20 +1059,32 @@ function update() {
   document.getElementById('xpVal').textContent = Math.floor(player.xp);
   document.getElementById('xpMaxVal').textContent = player.xpMax;
 
-  const classNames = { guerrero: "⚔️ Guerrero", mago: "🔮 Mago", leyenda: "👑 Leyenda", aldeano: "⚔️ Aldeano" };
-  const classColors = { guerrero: "#ff6633", mago: "#6699ff", leyenda: "#ffd700", aldeano: "#aaa" };
-  document.getElementById('classTag').textContent = classNames[player.cls];
-  document.getElementById('classTag').style.color = classColors[player.cls];
+  const classNames = { soldado: "🛡️ Soldado", mago: "🔮 Mago", cazador: "🏹 Cazador", escudero: "🏰 Escudero", vengador: "⚔️ Vengador", gould: "👻 No-Muerto", aldeano: "⚔️ Aldeano" };
+  const classColors = { soldado: "#ff6633", mago: "#6699ff", cazador: "#ff99ff", escudero: "#66ffff", vengador: "#ffaa00", gould: "#aa77dd", aldeano: "#aaa" };
+  document.getElementById('classTag').textContent = classNames[player.classPath || player.cls];
+  document.getElementById('classTag').style.color = classColors[player.classPath || player.cls];
 
   updateInventory();
 }
 
 function updateInventory() {
   const inv = document.getElementById('inventory');
-  const items = Object.entries(player.inv);
-  if (inv.children.length !== Math.max(items.length, 6)) {
+  const maxStack = parseInt(currentConfig.max_stack_items) || 99;
+  
+  // Crear items expandidos basado en max_stack
+  let expandedItems = [];
+  for (let [icon, count] of Object.entries(player.inv)) {
+    let remaining = count;
+    while (remaining > 0) {
+      let stack = Math.min(remaining, maxStack);
+      expandedItems.push({ icon, count: stack });
+      remaining -= stack;
+    }
+  }
+  
+  if (inv.children.length !== Math.max(expandedItems.length, 6)) {
     inv.innerHTML = '';
-    for (let i = 0; i < Math.max(items.length, 6); i++) {
+    for (let i = 0; i < Math.max(expandedItems.length, 6); i++) {
       let s = document.createElement('div');
       s.className = 'slot';
       inv.appendChild(s);
@@ -879,8 +1093,8 @@ function updateInventory() {
   }
   const slots = inv.children;
   for (let i = 0; i < slots.length; i++) {
-    if (i < items.length) {
-      slots[i].innerHTML = `<span class="icon">${items[i][0]}</span><span>${items[i][1]}</span>`;
+    if (i < expandedItems.length) {
+      slots[i].innerHTML = `<span class="icon">${expandedItems[i].icon}</span><span>${expandedItems[i].count}</span>`;
     } else {
       slots[i].innerHTML = '';
     }
@@ -893,15 +1107,20 @@ function draw() {
 
   ctx.clearRect(0, 0, W, H);
 
-  // Fondo con ciclo día/noche
-  let bgColor = isDay ? '#0f2010' : '#0a050f';
-  let overlayAlpha = isDay ? 0 : 0.4;
+  // Fondo con ciclo día/noche - MÁS CLARO durante el día
+  let bgColor = isDay ? '#7aaa4a' : '#1a2a3a';
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
   
-  // Superponer oscuridad en la noche
-  ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
-  ctx.fillRect(0, 0, W, H);
+  // Iluminación nocturna fuerte
+  if (!isDay) {
+    // Brillo azul nocturno principal
+    ctx.fillStyle = 'rgba(100, 140, 200, 0.25)';
+    ctx.fillRect(0, 0, W, H);
+    // Brillo plateado adicional
+    ctx.fillStyle = 'rgba(150, 160, 180, 0.12)';
+    ctx.fillRect(0, 0, W, H);
+  }
 
   dangerZones.forEach(z => {
     ctx.fillStyle = z.color + '88';
@@ -1064,6 +1283,26 @@ function draw() {
       ctx.beginPath();
       ctx.arc(sx, sy, 5, 0, Math.PI * 2);
       ctx.fill();
+    } else if (p.type === 'stone') {
+      ctx.fillStyle = '#999';
+      ctx.shadowColor = '#666';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.type === 'slash') {
+      ctx.strokeStyle = '#ffcc00';
+      ctx.shadowColor = '#ff8800';
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx - 5, sy - 5);
+      ctx.lineTo(sx + 5, sy + 5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx + 5, sy - 5);
+      ctx.lineTo(sx - 5, sy + 5);
+      ctx.stroke();
     } else {
       ctx.fillStyle = '#ffaa00';
       ctx.shadowColor = '#ffaa00';
@@ -1434,6 +1673,73 @@ function updateCharacterDisplay() {
   document.getElementById('charKills').textContent = killCount;
 }
 
+function updateStatsDisplay() {
+  const statIcons = {
+    attack: "⚔️",
+    defense: "🛡️",
+    intelligence: "🧠",
+    health: "❤️",
+    mobility: "💨",
+    dexterity: "🎯"
+  };
+  
+  const statNames = {
+    attack: "Ataque",
+    defense: "Defensa",
+    intelligence: "Inteligencia",
+    health: "Salud",
+    mobility: "Movilidad",
+    dexterity: "Destreza"
+  };
+  
+  const display = document.getElementById('statsDisplay');
+  display.innerHTML = '';
+  
+  for (let stat in player.stats) {
+    const value = player.stats[stat];
+    display.innerHTML += `
+      <div style="background: #2a2a3a; padding: 12px; border-radius: 6px; border: 1px solid #555;">
+        <div style="color: #c9a84c; font-weight: bold; margin-bottom: 8px;">
+          ${statIcons[stat]} ${statNames[stat]}
+        </div>
+        <div style="font-size: 18px; color: #4f4; font-weight: bold;">${value}</div>
+      </div>
+    `;
+  }
+  
+  document.getElementById('pointsCount').textContent = player.statPoints;
+  
+  const buttonsContainer = document.getElementById('statButtonsContainer');
+  buttonsContainer.innerHTML = '';
+  
+  for (let stat in player.stats) {
+    buttonsContainer.innerHTML += `
+      <button onclick="increaseStat('${stat}')" style="
+        padding: 10px;
+        background: ${player.statPoints > 0 ? '#2a3a2a' : '#1a1a1a'};
+        border: 2px solid ${player.statPoints > 0 ? '#4f4' : '#555'};
+        color: ${player.statPoints > 0 ? '#4f4' : '#666'};
+        border-radius: 6px;
+        cursor: ${player.statPoints > 0 ? 'pointer' : 'not-allowed'};
+        font-family: 'Cinzel', serif;
+        font-size: 12px;
+        transition: all 0.3s;
+      " ${player.statPoints > 0 ? '' : 'disabled'}>
+        + ${Object.keys(player.stats)[Object.keys(player.stats).indexOf(stat)]}
+      </button>
+    `;
+  }
+}
+
+function increaseStat(stat) {
+  if (player.statPoints > 0) {
+    player.stats[stat]++;
+    player.statPoints--;
+    updateStatsDisplay();
+    showNotification(`${stat} +1`);
+  }
+}
+
 function updateInventoryDisplay() {
   const invDisplay = document.getElementById('invDisplay');
   const items = Object.entries(player.inv);
@@ -1448,14 +1754,185 @@ function updateInventoryDisplay() {
   }
 }
 
+function showClassSelectionUI() {
+  const modal = document.createElement('div');
+  modal.id = 'classSelectionModal';
+  modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    font-family: 'Cinzel', serif;
+  `;
+  
+  const classes = [
+    { path: "mago", name: "🔮 Mago", desc: "Domina la magia e inteligencia" },
+    { path: "soldado", name: "🛡️ Soldado", desc: "Fuerte y disciplinado en combate" },
+    { path: "cazador", name: "🏹 Cazador", desc: "Rápido y preciso con armas" },
+    { path: "escudero", name: "🏰 Escudero", desc: "Defensor poderoso e inquebrantable" }
+  ];
+  
+  let html = `
+    <div style="background: #1a1a2e; border: 3px solid #c9a84c; padding: 30px; border-radius: 8px; text-align: center; max-width: 600px;">
+      <h2 style="color: #c9a84c; margin-bottom: 10px; font-size: 24px;">ELIGE TU CAMINO - NIVEL 10</h2>
+      <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Tu clase definirá tus habilidades y bonificaciones de estadísticas</p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+  `;
+  
+  classes.forEach(cls => {
+    const classData = classAbilitiesMap[cls.path];
+    html += `
+      <button onclick="selectClassPath('${cls.path}')" style="
+        padding: 15px;
+        background: #2a2a3a;
+        border: 2px solid #555;
+        color: #c9a84c;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: 'Cinzel', serif;
+        font-size: 14px;
+        transition: all 0.3s;
+      " onmouseover="this.style.borderColor='#c9a84c'; this.style.boxShadow='0 0 10px rgba(201,168,76,0.3)'" onmouseout="this.style.borderColor='#555'; this.style.boxShadow='none'">
+        <div style="font-size: 32px; margin-bottom: 8px;">${cls.name}</div>
+        <div style="font-size: 11px; color: #aaa; margin-bottom: 8px;">${cls.desc}</div>
+        <div style="font-size: 10px; color: #888;">Bonificadores: ${Object.entries(classData.bonusStats).map(([k,v]) => `${k.substr(0,3)}+${v}`).join(' | ')}</div>
+      </button>
+    `;
+  });
+  
+  html += `
+      </div>
+      <p style="color: #888; font-size: 10px;">Si no eliges, llegarás al nivel 15 para acceder a clases especiales</p>
+    </div>
+  `;
+  
+  modal.innerHTML = html;
+  document.body.appendChild(modal);
+}
+
+function showHiddenClassSelectionUI() {
+  const modal = document.createElement('div');
+  modal.id = 'classSelectionModal';
+  modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    font-family: 'Cinzel', serif;
+  `;
+  
+  let html = `
+    <div style="background: #1a1a2e; border: 3px solid #8b00ff; padding: 30px; border-radius: 8px; text-align: center; max-width: 600px;">
+      <h2 style="color: #c9a84c; margin-bottom: 10px; font-size: 24px;">⚔️ CLASES ESPECIALES DESBLOQUEADAS - NIVEL 15</h2>
+      <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Caminos ocultos según tu karma y travesía</p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+  `;
+  
+  // Vengador - requiere karma positivo
+  html += `
+    <button onclick="selectClassPath('vengador')" style="
+      padding: 15px;
+      background: #2a1a1a;
+      border: 2px solid #ffaa00;
+      color: #ffaa00;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      transition: all 0.3s;
+    " onmouseover="this.style.borderColor='#ffdd00'; this.style.boxShadow='0 0 15px rgba(255,170,0,0.5)'" onmouseout="this.style.borderColor='#ffaa00'; this.style.boxShadow='none'">
+      <div style="font-size: 32px; margin-bottom: 8px;">⚔️ Vengador</div>
+      <div style="font-size: 11px; color: #ffaa99; margin-bottom: 8px;">Poder arcano + Combate feroz</div>
+      <div style="font-size: 10px; color: #ff8888;">⭐ Requiere: Karma positivo</div>
+      <div style="font-size: 10px; color: #888;">Bonificadores: int+2 | atk+3 | mana+15</div>
+    </button>
+  `;
+  
+  // Gould (No-Muerto) - requiere karma negativo
+  html += `
+    <button onclick="selectClassPath('gould')" style="
+      padding: 15px;
+      background: #1a0a1a;
+      border: 2px solid #8844ff;
+      color: #aa77dd;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      transition: all 0.3s;
+    " onmouseover="this.style.borderColor='#dd99ff'; this.style.boxShadow='0 0 15px rgba(136,68,255,0.5)'" onmouseout="this.style.borderColor='#8844ff'; this.style.boxShadow='none'">
+      <div style="font-size: 32px; margin-bottom: 8px;">👻 No-Muerto (Gould)</div>
+      <div style="font-size: 11px; color: #dd99dd; margin-bottom: 8px;">Salud + Defensa con magia oscura</div>
+      <div style="font-size: 10px; color: #dd77dd;">💀 Requiere: Karma negativo</div>
+      <div style="font-size: 10px; color: #888;">Bonificadores: hlth+4 | def+3</div>
+    </button>
+  `;
+  
+  html += `
+      </div>
+      <p style="color: #888; font-size: 11px; margin-top: 15px;">
+        Tu Karma actual: <span style="color: ${player.karma >= 0 ? '#4f4' : '#f44'}; font-weight: bold;">${Math.floor(player.karma)}</span><br>
+        Muertes: <span style="color: #ffaa00;">${player.deathCount}</span>
+      </p>
+    </div>
+  `;
+  
+  modal.innerHTML = html;
+  document.body.appendChild(modal);
+}
+
+function selectClassPath(path) {
+  player.classPath = path;
+  player.classChosen = true;
+  
+  const classData = classAbilitiesMap[path];
+  player.cls = path;
+  player.classAbilities = classData.abilities;
+  
+  // Aplicar bonificaciones de estadísticas
+  if (classData.bonusStats) {
+    for (let stat in classData.bonusStats) {
+      if (stat === 'mana') {
+        player.maxMana += classData.bonusStats[stat];
+        player.mana = player.maxMana;
+      } else if (stat === 'health') {
+        player.maxHp += classData.bonusStats[stat] * 5;
+        player.hp = player.maxHp;
+      } else if (player.stats[stat]) {
+        player.stats[stat] += classData.bonusStats[stat];
+      }
+    }
+  }
+  
+  const modal = document.getElementById('classSelectionModal');
+  if (modal) modal.remove();
+  
+  showNotification(`¡Elegiste: ${classData.name}!`);
+}
+
 function loop() {
   update();
   draw();
   requestAnimationFrame(loop);
 }
 
+// Inicializar UI
 updateInventory();
-loop();
+updateSkillButtons();
+
+// Iniciar el juego
+console.log("🎮 Juego iniciando...");
+resize();
+setTimeout(() => {
+  console.log("Canvas info:", canvas.width, canvas.height, ctx);
+  loop();
+}, 100);
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e3c4679624b31d8',t:'MTc3NDc2MDA1Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e3c6e6eb4d68147',t:'MTc3NDc2MTY4OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
