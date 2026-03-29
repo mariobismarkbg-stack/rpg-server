@@ -715,13 +715,14 @@ function showNotification(text) {
   el._t = setTimeout(() => el.style.opacity = '0', 2000);
 }
 
-function spawnParticles(x, y, color, count) {
+ffunction spawnParticles(x, y, color, count) {
   for (let i = 0; i < count; i++) {
     particles.push({
       x, y,
-      dx: (Math.random() - 0.5) * 4,
-      dy: (Math.random() - 0.5) * 4,
-      life: 20 + Math.random() * 20,
+      dx: (Math.random() - 0.5) * 6,
+      dy: (Math.random() - 0.5) * 6,
+      life: 30 + Math.random() * 30,
+      size: Math.random() * 4 + 1,
       color
     });
   }
@@ -1119,6 +1120,18 @@ function draw() {
     // Brillo plateado adicional
     ctx.fillStyle = 'rgba(150, 160, 180, 0.12)';
     ctx.fillRect(0, 0, W, H);
+   if (!isDay) {
+  let gradient = ctx.createRadialGradient(
+    canvas.width/2, canvas.height/2, 100,
+    canvas.width/2, canvas.height/2, canvas.width
+  );
+
+  gradient.addColorStop(0, "rgba(120,140,255,0.15)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.85)");
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
   }
 
   dangerZones.forEach(z => {
@@ -1144,6 +1157,22 @@ function draw() {
     ctx.beginPath();
     ctx.arc(w.x - camX, w.y - camY, w.r, 0, Math.PI * 2);
     ctx.stroke();
+   ctx.fillStyle = '#1e88e5';
+ctx.fillRect(l.x - camX, l.y - camY, l.w, l.h);
+
+// brillo dinámico
+ctx.fillStyle = 'rgba(255,255,255,0.08)';
+for (let i = 0; i < 12; i++) {
+  ctx.beginPath();
+  ctx.arc(
+    l.x - camX + Math.random() * l.w,
+    l.y - camY + Math.random() * l.h,
+    4,
+    0,
+    Math.PI * 2
+  );
+  ctx.fill();
+}
   });
 
   ctx.fillStyle = '#1a3020';
@@ -1241,6 +1270,24 @@ function draw() {
     let sx = t.x - camX, sy = t.y - camY;
     if (sx < -40 || sy < -40 || sx > W + 40 || sy > H + 40) return;
     entities.push({ y: t.y, type: 'tree', data: t, sx, sy });
+   function drawTreePro(sx, sy, size) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 8, 12, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(sx - 3, sy - 5, 6, 12);
+
+  let grad = ctx.createRadialGradient(sx, sy - 10, 2, sx, sy - 10, size);
+  grad.addColorStop(0, '#66bb6a');
+  grad.addColorStop(1, '#1b5e20');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(sx, sy - 10, size, 0, Math.PI * 2);
+  ctx.fill();
+}
   });
 
   rocks.forEach(r => {
@@ -1312,6 +1359,10 @@ function draw() {
     }
     ctx.shadowBlur = 0;
   });
+ ctx.shadowColor = 'rgba(0,0,0,0.5)';
+ctx.shadowBlur = 8;
+ctx.shadowOffsetX = 2;
+ctx.shadowOffsetY = 4;
 
   // Dibujar items drapeados
   droppedItems.forEach(item => {
@@ -1332,6 +1383,14 @@ function draw() {
     ctx.fill();
   });
   ctx.globalAlpha = 1;
+ particles.forEach(p => {
+  ctx.globalAlpha = p.life / 60;
+  ctx.fillStyle = p.color;
+  ctx.beginPath();
+  ctx.arc(p.x - camX, p.y - camY, p.size || 3, 0, Math.PI * 2);
+  ctx.fill();
+});
+ctx.globalAlpha = 1;
 
   if (dialogBox) {
     ctx.fillStyle = 'rgba(10,10,20,0.9)';
