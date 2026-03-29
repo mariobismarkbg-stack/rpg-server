@@ -86,6 +86,8 @@ function conectar() {
 conectar();
 
 // jugador
+    let animFrame = 0;
+let moving = false;
 let player = {
     x: 1000,
     y: 1000,
@@ -119,7 +121,19 @@ document.addEventListener("keyup", (e) => {
 
 // update
 function update() {
+moving = false;
 
+if (keys["w"]) { player.y -= player.speed; moving = true; }
+if (keys["s"]) { player.y += player.speed; moving = true; }
+if (keys["a"]) { player.x -= player.speed; moving = true; }
+if (keys["d"]) { player.x += player.speed; moving = true; }
+
+// animación
+if (moving) {
+    animFrame += 0.2;
+} else {
+    animFrame = 0;
+}
     // MOVIMIENTO (esto arregla tu problema)
     if (keys["w"]) player.y -= player.speed;
     if (keys["s"]) player.y += player.speed;
@@ -216,8 +230,20 @@ function draw() {
     else if (player.class === "oscuro") ctx.fillStyle = "purple";
     else ctx.fillStyle = "blue";
 
-    ctx.fillRect(player.x - camera.x, player.y - camera.y, 20, 30);
+    let offset = Math.sin(animFrame) * 5; // movimiento arriba/abajo
 
+ctx.fillRect(
+    player.x - camera.x,
+    player.y - camera.y + offset,
+    20,
+    30
+);
+    // cuerpo
+ctx.fillRect(player.x - camera.x, player.y - camera.y, 20, 20);
+
+// piernas animadas
+ctx.fillRect(player.x - camera.x + 2, player.y - camera.y + 20 + Math.sin(animFrame)*5, 5, 10);
+ctx.fillRect(player.x - camera.x + 12, player.y - camera.y + 20 - Math.sin(animFrame)*5, 5, 10);
     document.getElementById("info").innerText =
         "Clase: " + player.class +
         " | Karma: " + myKarma +
