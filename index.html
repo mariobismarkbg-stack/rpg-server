@@ -27,8 +27,8 @@ canvas { background:#111; margin-top:20px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    color: white;
+    font-size: 20px;
+    flex-direction: column;
 }
 </style>
 </head>
@@ -49,10 +49,6 @@ const ctx = canvas.getContext("2d");
 let ws;
 let players = {};
 let myKarma = 0;
-
-// zonas
-const safeZone = { x: 1000, y: 1000, r: 200 };
-const darkZone = { x: 1400, y: 1400, r: 200 };
 
 function conectar() {
     ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
@@ -123,26 +119,12 @@ document.addEventListener("keyup", (e) => {
 
 // update
 function update() {
+
+    // MOVIMIENTO (esto arregla tu problema)
     if (keys["w"]) player.y -= player.speed;
     if (keys["s"]) player.y += player.speed;
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
-
-    // zonas
-    let dxSafe = player.x - safeZone.x;
-    let dySafe = player.y - safeZone.y;
-    let inSafe = Math.sqrt(dxSafe*dxSafe + dySafe*dySafe) < safeZone.r;
-
-    let dxDark = player.x - darkZone.x;
-    let dyDark = player.y - darkZone.y;
-    let inDark = Math.sqrt(dxDark*dxDark + dyDark*dyDark) < darkZone.r;
-
-    if (inSafe) attack = false;
-
-    if (inDark && myKarma > -20) {
-        player.x -= dxDark * 0.05;
-        player.y -= dyDark * 0.05;
-    }
 
     // clases por karma
     if (myKarma > 20) player.class = "paladin";
@@ -163,7 +145,11 @@ function update() {
                     e.hp = 50;
                     e.x = Math.random()*2000;
                     e.y = Math.random()*2000;
-                    player.inventory.push("loot");
+
+                    // 🔥 DROPS CON ICONOS
+                    const drops = ["🪵","🪨","💎","🧪"];
+                    let item = drops[Math.floor(Math.random()*drops.length)];
+                    player.inventory.push(item);
                 }
             }
         });
@@ -184,7 +170,7 @@ function update() {
     camera.y = player.y - canvas.height / 2;
 }
 
-// inventario
+// INVENTARIO
 function drawInventory() {
     const inv = document.getElementById("inventory");
     inv.innerHTML = "";
@@ -202,7 +188,10 @@ function drawInventory() {
         slot.className = "slot";
 
         if (items[i]) {
-            slot.innerText = items[i] + " (" + counts[items[i]] + ")";
+            slot.innerHTML = `
+                <div>${items[i]}</div>
+                <div style="font-size:10px;">x${counts[items[i]]}</div>
+            `;
         }
 
         inv.appendChild(slot);
@@ -215,6 +204,12 @@ function draw() {
 
     ctx.fillStyle = "#2e8b57";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // enemigos
+    enemies.forEach(e => {
+        ctx.fillStyle = "purple";
+        ctx.fillRect(e.x - camera.x, e.y - camera.y, 20, 20);
+    });
 
     // jugador
     if (player.class === "paladin") ctx.fillStyle = "gold";
