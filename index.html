@@ -8,6 +8,7 @@
 body { background:black; color:white; text-align:center; }
 canvas { background:#111; margin-top:20px; }
 
+/* INVENTARIO */
 #inventory {
     position: fixed;
     bottom: 10px;
@@ -26,8 +27,30 @@ canvas { background:#111; margin-top:20px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 14px;
     flex-direction: column;
+}
+
+/* HABILIDADES */
+#skills {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+}
+
+.skill {
+    width: 60px;
+    height: 60px;
+    background: #111;
+    border: 2px solid #777;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-size: 12px;
 }
 </style>
 </head>
@@ -39,66 +62,57 @@ canvas { background:#111; margin-top:20px; }
 <p id="info"></p>
 
 <canvas id="game" width="600" height="400"></canvas>
+
+<div id="skills">
+    <div class="skill">Q<br>⚡</div>
+    <div class="skill">E<br>💥</div>
+</div>
+
 <div id="inventory"></div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let ws;
-let players = {};
-let myKarma = 0;
-
-function conectar() {
-    ws = new WebSocket("wss://rpg-server-01lz.onrender.com/");
-
-    ws.onopen = () => {
-        document.getElementById("status").innerText = "🟢 Conectado";
-    };
-
-    ws.onclose = () => {
-        document.getElementById("status").innerText = "Reconectando...";
-        setTimeout(conectar, 2000);
-    };
-
-    ws.onmessage = (e) => {
-        try {
-            players = JSON.parse(e.data);
-
-            for (let id in players) {
-                let p = players[id];
-                let dx = p.x - player.x;
-                let dy = p.y - player.y;
-                let dist = Math.sqrt(dx*dx + dy*dy);
-
-                if (dist < 5) {
-                    myKarma = p.karma || 0;
-                    break;
-                }
-            }
-        } catch {}
-    };
-}
-conectar();
-
 // jugador
-let player = {
-    x: 1000,
-    y: 1000,
-    speed: 4,
-    hp: 100,
-    class: "guerrero",
-    inventory: []
-};
+let player = { x: 1000, y: 1000, speed: 4, inventory: [] };
 
+// animaciones
 let animFrame = 0;
 let moving = false;
 let attack = false;
-let attackAnim = 0;
+let skillQ = false;
+let skillE = false;
 
-// enemigos con movimiento
+// mundo
+let trees = [];
+let rocks = [];
+let waterZones = [];
+
+// 🌲 bosque GRANDE
+for (let i = 0; i < 120; i++) {
+    trees.push({ x: Math.random()*2000, y: Math.random()*2000, hp: 30, cut:false });
+}
+
+// 🪨 rocas
+for (let i = 0; i < 80; i++) {
+    rocks.push({ x: Math.random()*2000, y: Math.random()*2000 });
+}
+
+// 🌊 agua GRANDE
+for (let i = 0; i < 5; i++) {
+    waterZones.push({
+        x: Math.random()*1600,
+        y: Math.random()*1600,
+        w: 400,
+        h: 400,
+        deep: Math.random() > 0.5
+    });
+}
+
+// enemigos
 let enemies = [];
-for (let i = 0; i < 10; i++) {
+for (let i = 0; i < 12; i++) {
     enemies.push({
         x: Math.random()*2000,
         y: Math.random()*2000,
@@ -108,191 +122,208 @@ for (let i = 0; i < 10; i++) {
     });
 }
 
-// mundo
-let trees = [];
-let rocks = [];
-let waterZones = [];
-
-for (let i = 0; i < 50; i++) {
-    trees.push({ x: Math.random()*2000, y: Math.random()*2000 });
-}
-
-for (let i = 0; i < 40; i++) {
-    rocks.push({ x: Math.random()*2000, y: Math.random()*2000 });
-}
-
-for (let i = 0; i < 3; i++) {
-    waterZones.push({
-        x: Math.random()*1800,
-        y: Math.random()*1800,
-        w: 200,
-        h: 200
-    });
-}
-
 // cámara
 let camera = { x: 0, y: 0 };
 
 // controles
 let keys = {};
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", e => {
     keys[e.key] = true;
-    if (e.key === " ") {
-        attack = true;
-        attackAnim = 10;
-    }
+
+    if (e.key === " ") attack = true;
+    if (e.key === "q") skillQ = true;
+    if (e.key === "e") skillE = true;
 });
-document.addEventListener("keyup", (e) => {
-    keys[e.key] = false;
-});
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// colisión
+function collide(x,y,ox,oy,size){
+    return x<ox+size && x+20>ox && y<oy+size && y+20>oy;
+}
 
 // update
-function update() {
+function update(){
 
+    let newX = player.x;
+    let newY = player.y;
     moving = false;
 
-    if (keys["w"]) { player.y -= player.speed; moving = true; }
-    if (keys["s"]) { player.y += player.speed; moving = true; }
-    if (keys["a"]) { player.x -= player.speed; moving = true; }
-    if (keys["d"]) { player.x += player.speed; moving = true; }
+    if(keys["w"]){ newY -= player.speed; moving=true; }
+    if(keys["s"]){ newY += player.speed; moving=true; }
+    if(keys["a"]){ newX -= player.speed; moving=true; }
+    if(keys["d"]){ newX += player.speed; moving=true; }
 
-    // anim caminar
-    if (moving) animFrame += 0.2;
-    else animFrame = 0;
+    let blocked=false;
 
-    // anim ataque
-    if (attackAnim > 0) attackAnim--;
+    // árboles
+    trees.forEach(t=>{
+        if(!t.cut && collide(newX,newY,t.x,t.y,30)) blocked=true;
+    });
 
-    // enemigos se mueven
-    enemies.forEach(e => {
-        e.x += e.dirX;
-        e.y += e.dirY;
+    // rocas
+    rocks.forEach(r=>{
+        if(collide(newX,newY,r.x,r.y,25)) blocked=true;
+    });
 
-        if (Math.random() < 0.01) {
-            e.dirX = (Math.random()-0.5)*2;
-            e.dirY = (Math.random()-0.5)*2;
+    // agua profunda
+    waterZones.forEach(w=>{
+        if(w.deep &&
+            newX < w.x + w.w &&
+            newX + 20 > w.x &&
+            newY < w.y + w.h &&
+            newY + 20 > w.y
+        ){
+            blocked=true;
         }
     });
 
-    // combate
-    if (attack) {
-        enemies.forEach(e => {
-            let dx = e.x - player.x;
-            let dy = e.y - player.y;
-            let dist = Math.sqrt(dx*dx + dy*dy);
+    if(!blocked){
+        player.x=newX;
+        player.y=newY;
+    }
 
-            if (dist < 60) {
-                e.hp -= 10;
+    if(moving) animFrame+=0.2; else animFrame=0;
 
-                if (e.hp <= 0) {
-                    e.hp = 50;
-                    e.x = Math.random()*2000;
-                    e.y = Math.random()*2000;
+    // enemigos se mueven
+    enemies.forEach(e=>{
+        e.x+=e.dirX;
+        e.y+=e.dirY;
 
-                    const drops = ["🪵","🪨","💎","🧪"];
-                    player.inventory.push(drops[Math.floor(Math.random()*drops.length)]);
+        if(Math.random()<0.02){
+            e.dirX=(Math.random()-0.5)*2;
+            e.dirY=(Math.random()-0.5)*2;
+        }
+    });
+
+    // ATAQUES
+    if(attack || skillQ || skillE){
+
+        enemies.forEach(e=>{
+            let dx=e.x-player.x;
+            let dy=e.y-player.y;
+            let dist=Math.sqrt(dx*dx+dy*dy);
+
+            let range=60;
+            let dmg=10;
+
+            if(skillQ){ range=100; dmg=20; }
+            if(skillE){ range=150; dmg=8; }
+
+            if(dist<range){
+                e.hp-=dmg;
+
+                if(e.hp<=0){
+                    e.hp=50;
+                    e.x=Math.random()*2000;
+                    e.y=Math.random()*2000;
+
+                    const drops=["🪵","🪨","💎","🧪"];
+                    player.inventory.push(drops[Math.floor(Math.random()*4)]);
+                }
+            }
+        });
+
+        // árboles
+        trees.forEach(t=>{
+            if(!t.cut){
+                let dx=t.x-player.x;
+                let dy=t.y-player.y;
+                let dist=Math.sqrt(dx*dx+dy*dy);
+
+                if(dist<60){
+                    t.hp-=10;
+                    if(t.hp<=0){
+                        t.cut=true;
+                        player.inventory.push("🪵");
+                    }
                 }
             }
         });
     }
 
-    // enviar server
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            x: player.x,
-            y: player.y,
-            attack: attack
-        }));
-    }
+    attack=false;
+    skillQ=false;
+    skillE=false;
 
-    attack = false;
-
-    camera.x = player.x - canvas.width / 2;
-    camera.y = player.y - canvas.height / 2;
+    camera.x = player.x - canvas.width/2;
+    camera.y = player.y - canvas.height/2;
 }
 
 // inventario
-function drawInventory() {
-    const inv = document.getElementById("inventory");
-    inv.innerHTML = "";
+function drawInventory(){
+    const inv=document.getElementById("inventory");
+    inv.innerHTML="";
+    let counts={};
 
-    let counts = {};
-    player.inventory.forEach(item => {
-        counts[item] = (counts[item] || 0) + 1;
-    });
+    player.inventory.forEach(i=>counts[i]=(counts[i]||0)+1);
+    let items=Object.keys(counts);
 
-    let items = Object.keys(counts);
+    for(let i=0;i<10;i++){
+        let s=document.createElement("div");
+        s.className="slot";
 
-    for (let i = 0; i < 10; i++) {
-        let slot = document.createElement("div");
-        slot.className = "slot";
-
-        if (items[i]) {
-            slot.innerHTML = `<div>${items[i]}</div><div style="font-size:10px;">x${counts[items[i]]}</div>`;
+        if(items[i]){
+            s.innerHTML=`${items[i]}<br>x${counts[items[i]]}`;
         }
 
-        inv.appendChild(slot);
+        inv.appendChild(s);
     }
 }
 
 // draw
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function draw(){
 
-    ctx.fillStyle = "#2e8b57";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // fondo
+    ctx.fillStyle="#2e8b57";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
     // agua
-    waterZones.forEach(w => {
-        ctx.fillStyle = "rgba(0,100,255,0.5)";
-        ctx.fillRect(w.x - camera.x, w.y - camera.y, w.w, w.h);
+    waterZones.forEach(w=>{
+        ctx.fillStyle = w.deep ? "rgba(0,0,150,0.7)" : "rgba(0,150,255,0.5)";
+        ctx.fillRect(w.x-camera.x, w.y-camera.y, w.w, w.h);
     });
 
-    // árboles
-    trees.forEach(t => {
-        ctx.fillStyle = "darkgreen";
-        ctx.fillRect(t.x - camera.x, t.y - camera.y, 30, 30);
+    // bosque
+    trees.forEach(t=>{
+        if(!t.cut){
+            ctx.fillStyle="darkgreen";
+            ctx.fillRect(t.x-camera.x, t.y-camera.y, 30,30);
+        } else {
+            ctx.fillStyle="brown";
+            ctx.fillRect(t.x-camera.x, t.y-camera.y, 20,10);
+        }
     });
 
     // rocas
-    rocks.forEach(r => {
-        ctx.fillStyle = "gray";
-        ctx.fillRect(r.x - camera.x, r.y - camera.y, 25, 25);
+    rocks.forEach(r=>{
+        ctx.fillStyle="gray";
+        ctx.fillRect(r.x-camera.x, r.y-camera.y, 25,25);
     });
 
     // enemigos
-    enemies.forEach(e => {
-        ctx.fillStyle = "purple";
-        ctx.fillRect(e.x - camera.x, e.y - camera.y, 20, 20);
+    enemies.forEach(e=>{
+        ctx.fillStyle="purple";
+        ctx.fillRect(e.x-camera.x, e.y-camera.y, 20,20);
 
-        ctx.fillStyle = "red";
-        ctx.fillRect(e.x - camera.x, e.y - camera.y - 10, e.hp, 4);
+        ctx.fillStyle="red";
+        ctx.fillRect(e.x-camera.x, e.y-camera.y-8, e.hp, 4);
     });
 
     // jugador
-    let offset = Math.sin(animFrame) * 5;
+    let offset=Math.sin(animFrame)*5;
 
-    ctx.fillStyle = "blue";
+    ctx.fillStyle="blue";
+    ctx.fillRect(player.x-camera.x, player.y-camera.y+offset, 20,20);
 
-    ctx.fillRect(player.x - camera.x, player.y - camera.y + offset, 20, 20);
-
-    ctx.fillRect(player.x - camera.x + 2, player.y - camera.y + 20 + Math.sin(animFrame)*5, 5, 10);
-    ctx.fillRect(player.x - camera.x + 12, player.y - camera.y + 20 - Math.sin(animFrame)*5, 5, 10);
-
-    // ataque visual
-    if (attackAnim > 0) {
-        ctx.fillStyle = "yellow";
-        ctx.beginPath();
-        ctx.arc(player.x - camera.x + 10, player.y - camera.y + 10, 30, 0, Math.PI*2);
-        ctx.fill();
-    }
-
+    // UI
     document.getElementById("info").innerText =
-        "Inventario: " + player.inventory.length;
+        "Inventario: "+player.inventory.length;
 }
 
 // loop
-function loop() {
+function loop(){
     update();
     draw();
     drawInventory();
